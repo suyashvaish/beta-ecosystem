@@ -1,0 +1,36 @@
+name: voice_orb_app
+description: A voice-assistant style UI with a color-reactive orb, wired to the Beta backend.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.6
+  speech_to_text: ^7.0.0
+  flutter_tts: ^4.2.3
+  # --- Backend integration -------------------------------------------------
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  http: ^1.2.2
+
+  # --- Settings persistence -------------------------------------------------
+  shared_preferences: ^2.2.3
+
+  # Optional, for wiring up REAL microphone amplitude instead of the
+  # stream-driven pulse used for the assistant's replies. Uncomment
+  # whichever fits your case:
+  # record: ^5.0.4          # mic amplitude stream
+  # noise_meter: ^1.0.2     # mic decibel stream
+  # just_audio: ^0.9.36     # TTS/audio playback with position/processing streams
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+flutter:
+  uses-material-design: true
