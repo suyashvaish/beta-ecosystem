@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "35313822795",
+    "project_id": "beta-ai-bbc28",
+    "storage_bucket": "beta-ai-bbc28.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:35313822795:android:cb115d8b757e8fcc6af1ce",
+        "android_client_info": {
+          "package_name": "com.example.beta_care"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDukK3OgGN6UBoCWHExF-ysn5bcEBtrh70"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:35313822795:android:472c6b21c8e1a6796af1ce",
+        "android_client_info": {
+          "package_name": "com.example.voice_orb_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDukK3OgGN6UBoCWHExF-ysn5bcEBtrh70"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

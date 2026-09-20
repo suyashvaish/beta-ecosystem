@@ -1,0 +1,37 @@
+name: beta_care
+description: "Beta Care - the parent/caregiver companion app for the Beta AI elderly-assistance ecosystem."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # State management
+  provider: ^6.1.2
+
+  # Networking (talks to the existing Beta backend REST API)
+  http: ^1.2.1
+
+  # Identity only - the app never talks to Firestore or any database directly.
+  firebase_core: ^3.1.0
+  firebase_auth: ^5.1.0
+  firebase_messaging: ^15.0.0
+
+  # Offline handling, local "last known good" caching, formatting, deep links
+  connectivity_plus: ^6.0.3
+  shared_preferences: ^2.2.3
+  intl: ^0.19.0
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
