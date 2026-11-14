@@ -34,7 +34,10 @@ def get_firebase_app() -> firebase_admin.App:
         # App already initialized (can happen with reload/hot-restart)
         return firebase_admin.get_app()
     except FileNotFoundError as exc:
-        logger.error("Firebase credentials file not found", extra={"extra_fields": {{"path": settings.FIREBASE_CREDENTIALS_PATH}}})
+        logger.error(
+            "Firebase credentials file not found",
+            extra={"extra_fields": {"path": settings.FIREBASE_CREDENTIALS_PATH}},
+        )
         raise AuthenticationError("Firebase credentials are not configured correctly") from exc
 
 
