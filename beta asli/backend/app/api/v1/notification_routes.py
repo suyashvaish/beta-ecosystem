@@ -8,6 +8,7 @@ arbitrary alerts to arbitrary devices.
 """
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
@@ -21,15 +22,8 @@ from app.services.notification_service import NotificationService
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
-async def _registered_caregiver_tokens(db: AsyncSession, user_id) -> list[str]:
-    repo = CaregiverRepository(db)
-    caregivers = await repo.list_for_cared_for_user(user_id)
-    tokens: list[str] = []
-    for caregiver in caregivers:
-        token = getattr(caregiver, "fcm_device_token", None)
-        if token:
-            tokens.append(token)
-    return tokens
+class EmergencyAlertRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=500)
 
 
 @router.post("", response_model=NotificationResponse)
@@ -59,13 +53,14 @@ async def list_notifications(
 
 @router.post("/emergency", response_model=NotificationResponse)
 async def send_emergency_alert(
-    message: str,
+    payload: EmergencyAlertRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Trigger an emergency SOS notification fanned out to caregiver devices."""
-    caregiver_tokens = await _registered_caregiver_tokens(db, current_user.id)
+    repo = CaregiverRepository(db)
+    caregiver_tokens = await repo.device_tokens_for_cared_for_user(current_user.id)
     service = NotificationService(db)
     return await service.send_emergency_alert(
-        user_id=current_user.id, message=message, caregiver_tokens=caregiver_tokens
+        user_id=current_user.id, message=payload.message, caregiver_tokens=caregiver_tokens
     )
