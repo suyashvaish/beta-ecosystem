@@ -34,7 +34,7 @@ def get_firebase_app() -> firebase_admin.App:
         # App already initialized (can happen with reload/hot-restart)
         return firebase_admin.get_app()
     except FileNotFoundError as exc:
-        logger.error("Firebase credentials file not found", extra={"extra_fields": {"path": settings.FIREBASE_CREDENTIALS_PATH}})
+        logger.error("Firebase credentials file not found", extra={"extra_fields": {{"path": settings.FIREBASE_CREDENTIALS_PATH}}})
         raise AuthenticationError("Firebase credentials are not configured correctly") from exc
 
 
@@ -44,25 +44,39 @@ def verify_id_token(id_token: str) -> Dict[str, Any]:
 
     Raises AuthenticationError on any invalid/expired/revoked token so
     callers only need to handle a single exception type.
+
+    Client responses are intentionally generic: raw Firebase SDK messages
+    can leak internal details (project ids, error hints) and are logged
+    server-side instead.
     """
     app = get_firebase_app()
     try:
         decoded_token = firebase_auth.verify_id_token(id_token, app=app, check_revoked=True)
+        # Only trust an email the user has verified with Firebase.
+        # An unverified email claim must not provision a local identity.
+        if decoded_token.get("email") is not None and not decoded_token.get("email_verified", False):
+            raise AuthenticationError("Email address is not verified")
         return decoded_token
+    except AuthenticationError:
+        raise
     except firebase_auth.ExpiredIdTokenError as exc:
+        logger.warning(
+            "Firebase ExpiredIdTokenError",
+            extra={"extra_fields": {"error": str(exc)}},
+        )
         raise AuthenticationError("Token has expired") from exc
     except firebase_auth.RevokedIdTokenError as exc:
         logger.error(
             "Firebase RevokedIdTokenError",
             extra={"extra_fields": {"error": str(exc)}},
         )
-        raise AuthenticationError(f"Firebase rejected token: {exc}") from exc
+        raise AuthenticationError("Session has expired, please sign in again") from exc
     except firebase_auth.InvalidIdTokenError as exc:
         logger.error(
             "Firebase InvalidIdTokenError",
             extra={"extra_fields": {"error": str(exc)}},
         )
-        raise AuthenticationError(f"Firebase rejected token: {exc}") from exc
+        raise AuthenticationError("Invalid authentication token") from exc
     except Exception as exc:
         logger.error(
             "Firebase token verification failed",
@@ -71,7 +85,7 @@ def verify_id_token(id_token: str) -> Dict[str, Any]:
                 "error": str(exc),
             }},
         )
-        raise AuthenticationError(f"Firebase verification failed: {exc}") from exc
+        raise AuthenticationError("Authentication failed") from exc
 
 
 def revoke_refresh_tokens(firebase_uid: str) -> None:
