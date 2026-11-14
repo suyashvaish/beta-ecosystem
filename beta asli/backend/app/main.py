@@ -41,15 +41,18 @@ app = FastAPI(
         "full elderly-care AI platform."
     ),
     lifespan=lifespan,
-    debug=settings.DEBUG,
+    # debug=False always: settings.DEBUG controls logging verbosity, but
+    # FastAPI's debug mode embeds raw tracebacks in error responses and
+    # re-raises exceptions - never acceptable in production.
+    debug=False,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=settings.ALLOWED_ORIGINS,  # explicit origins only, never "*"
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=settings.ALLOWED_METHODS,
+    allow_headers=settings.ALLOWED_HEADERS,
 )
 app.add_middleware(RateLimitMiddleware)
 
@@ -88,7 +91,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 @app.get("/health", tags=["health"])
 async def health_check():
     """Liveness/readiness probe used by Docker/Kubernetes and load balancers."""
-    return {"status": "ok", "environment": settings.ENVIRONMENT}
+    # Environment name intentionally omitted - it leaks deployment detail.
+    return {"status": "ok"}
 
 
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)

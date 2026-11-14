@@ -13,6 +13,9 @@ dependencies:
   cupertino_icons: ^1.0.6
   speech_to_text: ^7.0.0
   flutter_tts: ^4.2.3
+  # Runtime microphone permission requests (Android 6+ requires the grant
+  # at runtime; the manifest line alone is not enough).
+  permission_handler: ^11.3.0
   # --- Backend integration -------------------------------------------------
   firebase_core: ^3.6.0
   firebase_auth: ^5.3.1

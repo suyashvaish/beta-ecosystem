@@ -5,6 +5,11 @@ Represents a caregiver's access relationship to an elderly user's account.
 A caregiver may or may not have their own User row (they might just be
 notified via email/SMS); `caregiver_user_id` is nullable to support both
 cases.
+
+`fcm_device_token` holds the caregiver's FCM push token so the backend can
+deliver emergency alerts to registered caregivers. The token is ALWAYS
+populated/owned server-side; clients never supply tokens for other users
+(a client-supplied token list would allow arbitrary push injection).
 """
 
 import enum
@@ -41,6 +46,12 @@ class Caregiver(Base, TimestampMixin):
     caregiver_phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     access_level: Mapped[CaregiverAccessLevel] = mapped_column(
         Enum(CaregiverAccessLevel), default=CaregiverAccessLevel.view_only
+    )
+    # FCM push token for this caregiver's device. Populated when the
+    # caregiver registers their device; used to fan out emergency alerts.
+    # Kept long to tolerate long-lived FCM registration tokens.
+    fcm_device_token: Mapped[Optional[str]] = mapped_column(
+        String(4096), nullable=True
     )
 
     cared_for_user: Mapped["User"] = relationship(
