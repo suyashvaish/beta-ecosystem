@@ -16,15 +16,15 @@ any device (push-injection relay).
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models.caregiver import CaregiverAccessLevel
 from app.models.user import User
-from app.tools.elderly_care_service import ElderlyCareService
 from app.repositories.caregiver_repository import CaregiverRepository
+from app.tools.elderly_care_service import ElderlyCareService
 
 router = APIRouter(prefix="/elderly-care", tags=["elderly-care"])
 
@@ -50,11 +50,6 @@ class SosRequest(BaseModel):
 
 class FallDetectionEventRequest(BaseModel):
     sensor_payload: dict = Field(..., description="Raw sensor readings; stored as-is")
-    caregiver_tokens: list[str] = Field(
-        default_factory=list,
-        max_length=20,
-        description="DEPRECATED - ignored. Caregiver tokens are resolved server-side.",
-    )
 
 
 class WellnessCheckInRequest(BaseModel):
@@ -70,17 +65,11 @@ class CaregiverRequest(BaseModel):
 
 
 async def _registered_caregiver_tokens(
-    db: AsyncSession, user_id: User
+    db: AsyncSession, user_id
 ) -> list[str]:
     """Resolve caregiver FCM tokens server-side. Client never supplies them."""
     repo = CaregiverRepository(db)
-    caregivers = await repo.list_for_cared_for_user(user_id.id)
-    tokens: list[str] = []
-    for caregiver in caregivers:
-        token = getattr(caregiver, "fcm_device_token", None)
-        if token:
-            tokens.append(token)
-    return tokens
+    return await repo.device_tokens_for_cared_for_user(user_id)
 
 
 @router.post("/medication-reminders")
@@ -117,7 +106,7 @@ async def trigger_sos(
     service: ElderlyCareService = Depends(get_elderly_care_service),
     db: AsyncSession = Depends(get_db),
 ):
-    caregiver_tokens = await _registered_caregiver_tokens(db, current_user)
+    caregiver_tokens = await _registered_caregiver_tokens(db, current_user.id)
     return await service.trigger_emergency_sos(
         user_id=current_user.id, message=payload.message, caregiver_tokens=caregiver_tokens
     )
@@ -135,7 +124,7 @@ async def report_fall_detection_event(
     hardware. Persists the event and immediately raises an SOS to the
     registered caregivers (tokens resolved server-side).
     """
-    caregiver_tokens = await _registered_caregiver_tokens(db, current_user)
+    caregiver_tokens = await _registered_caregiver_tokens(db, current_user.id)
     return await service.record_fall_detection_event(
         user_id=current_user.id,
         sensor_payload=payload.sensor_payload,
