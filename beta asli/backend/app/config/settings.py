@@ -12,7 +12,7 @@ We use pydantic-settings so that:
 from functools import lru_cache
 from typing import List, Literal
 
-from pydantic import AnyUrl, Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,7 +32,9 @@ class Settings(BaseSettings):
 
     # ---- Security ----------------------------------------------------------
     SECRET_KEY: str = Field(..., description="Used for signing internal tokens")
-    ALLOWED_ORIGINS: List[str] = ["*"]
+    # No wildcard default: allowed origins MUST be configured explicitly.
+    # The app refuses to start if "*" appears in the list.
+    ALLOWED_ORIGINS: List[str] = []
     RATE_LIMIT_PER_MINUTE: int = 60
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
@@ -41,6 +43,31 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
+
+    @model_validator(mode="after")
+    def validate_security(self) -> "Settings":
+        # 1) Never run with wildcard CORS.
+        if "*" in self.ALLOWED_ORIGINS:
+            raise ValueError(
+                "ALLOWED_ORIGINS must not contain '*'. List explicit origins "
+                "(e.g. http://localhost:3000) or set ENVIRONMENT=local."
+            )
+        if not self.ALLOWED_ORIGINS and self.ENVIRONMENT == "local":
+            # Sensible local-only default; still explicit, never a wildcard.
+            self.ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:8080"]
+        # 2) DEBUG must never be true outside local development.
+        if self.ENVIRONMENT in ("staging", "production"):
+            self.DEBUG = False
+        return self
+
+    # Computed: explicit list of methods/headers instead of ["*"].
+    @property
+    def ALLOWED_METHODS(self) -> List[str]:
+        return ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+
+    @property
+    def ALLOWED_HEADERS(self) -> List[str]:
+        return ["Authorization", "Content-Type"]
 
     # ---- Database ------------------------------------------------------------
     DATABASE_URL: str = Field(
@@ -68,11 +95,13 @@ class Settings(BaseSettings):
     AI_REQUEST_TIMEOUT_SECONDS: int = 30
 
     # ---- Speech (STT/TTS) ------------------------------------------------
-    # Same OpenAI account/key as the AI stage above (OPENAI_API_KEY) -
-    # Whisper for transcription, the TTS API for synthesis.
     OPENAI_STT_MODEL: str = "whisper-1"
     OPENAI_TTS_MODEL: str = "tts-1"
     OPENAI_TTS_DEFAULT_VOICE: str = "alloy"
+    # Hard limits so a single request cannot exhaust memory or burn
+    # unbounded OpenAI cost (STT input size, TTS text length).
+    MAX_AUDIO_UPLOAD_BYTES: int = 25 * 1024 * 1024  # 25 MB
+    MAX_TTS_TEXT_LENGTH: int = 4000  # characters
 
     # ---- Memory / Vector store ------------------------------------------------
     VECTOR_DIMENSIONS: int = 1536
