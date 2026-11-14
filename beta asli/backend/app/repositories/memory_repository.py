@@ -42,12 +42,22 @@ class MemoryRepository:
         return memory
 
     async def list_for_user(
-        self, user_id: uuid.UUID, memory_type: Optional[MemoryType] = None
+        self,
+        user_id: uuid.UUID,
+        memory_type: Optional[MemoryType] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
     ) -> Sequence[Memory]:
+        # limit/offset are optional so existing callers behave unchanged;
+        # the API uses them to bound responses instead of loading every row.
         stmt = select(Memory).where(Memory.user_id == user_id)
         if memory_type is not None:
             stmt = stmt.where(Memory.memory_type == memory_type)
         stmt = stmt.order_by(Memory.created_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        if offset:
+            stmt = stmt.offset(offset)
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
