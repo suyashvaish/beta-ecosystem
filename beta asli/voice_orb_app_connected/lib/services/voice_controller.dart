@@ -129,14 +129,16 @@ class VoiceController {
   Future<void> _configureTts() async {
     try {
       // Surface real engine failures instead of a silent no-op speak().
-      await _tts.setStartHandler(() {
+      // NOTE: the set*Handler setters return void in this flutter_tts
+      // version - do NOT await them.
+      _tts.setStartHandler(() {
         final Completer<bool>? completer = _ttsStartCompleter;
         if (completer != null && !completer.isCompleted) {
           completer.complete(true);
         }
       });
 
-      await _tts.setCompletionHandler(() {
+      _tts.setCompletionHandler(() {
         final Completer<bool>? completer = _ttsStartCompleter;
         if (completer != null && !completer.isCompleted) {
           completer.complete(true);
@@ -144,14 +146,14 @@ class VoiceController {
       });
 
       // flutter_tts's ErrorHandler typedef is dynamic, not Object.
-      await _tts.setErrorHandler((dynamic message) {
+      _tts.setErrorHandler((dynamic message) {
         final Completer<bool>? completer = _ttsStartCompleter;
         if (completer != null && !completer.isCompleted) {
           completer.complete(false);
         }
       });
 
-      await _tts.setCancelHandler(() {
+      _tts.setCancelHandler(() {
         final Completer<bool>? completer = _ttsStartCompleter;
         if (completer != null && !completer.isCompleted) {
           completer.complete(false);
