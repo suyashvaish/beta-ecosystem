@@ -35,6 +35,7 @@ import 'dart:async';
 
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 /// High-level assistant state, matching the orb's five states.
@@ -102,16 +103,11 @@ class VoiceController {
     }
 
     // ---- 2. Speech recognizer --------------------------------------------
+    // NOTE: onSoundLevelChange belongs to listen(), NOT initialize() in
+    // speech_to_text 7.x - the real dB readings are wired there instead.
     _available = await _speech.initialize(
       onError: _handleSttError,
       onStatus: _handleSttStatus,
-      // Real microphone dB readings drive the orb - no fake pulses.
-      onSoundLevelChange: (double levelDb) {
-        if (_disposed) return;
-        // Typical speech peaks near 0..+12 dB; map to a 0..1 orb level.
-        final double normalized = ((levelDb + 2.0) / 12.0).clamp(0.0, 1.0);
-        onLevelChanged?.call(normalized);
-      },
       debugLogging: true,
     );
 
@@ -147,7 +143,8 @@ class VoiceController {
         }
       });
 
-      await _tts.setErrorHandler((Object message) {
+      // flutter_tts's ErrorHandler typedef is dynamic, not Object.
+      await _tts.setErrorHandler((dynamic message) {
         final Completer<bool>? completer = _ttsStartCompleter;
         if (completer != null && !completer.isCompleted) {
           completer.complete(false);
@@ -202,6 +199,9 @@ class VoiceController {
     try {
       await _speech.listen(
         onResult: _handleSttResult,
+        // Real microphone dB readings drive the orb - no fake pulses.
+        // This is a listen() parameter in speech_to_text 7.x.
+        onSoundLevelChange: _handleSoundLevel,
         listenOptions: SpeechListenOptions(
           listenFor: const Duration(seconds: 30),
           // 3s of silence ends the turn - long enough for elderly users
@@ -216,6 +216,14 @@ class VoiceController {
       _listenInProgress = false;
       _notifyError('Unable to start the microphone.');
     }
+  }
+
+  /// Real mic dB readings -> 0..1 orb level. Values differ per platform;
+  // this mapping works for typical Android/iOS speech input levels.
+  void _handleSoundLevel(double levelDb) {
+    if (_disposed) return;
+    final double normalized = ((levelDb + 2.0) / 12.0).clamp(0.0, 1.0);
+    onLevelChanged?.call(normalized);
   }
 
   Future<void> stopListening() async {
@@ -287,6 +295,7 @@ class VoiceController {
     try {
       await _speech.listen(
         onResult: _handleSttResult,
+        onSoundLevelChange: _handleSoundLevel,
         listenOptions: SpeechListenOptions(
           listenFor: const Duration(seconds: 30),
           pauseFor: const Duration(seconds: 3),
