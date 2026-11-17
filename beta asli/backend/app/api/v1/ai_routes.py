@@ -21,8 +21,6 @@ from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.services.tool_chat_service import ToolAwareChatService
-from app.utils.rate_limit import rate_limiter
-from app.utils.exceptions import AIServiceError
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -49,7 +47,6 @@ async def ai_chat(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    rate_limiter.check(f"ai_chat:{user.id}")
     location = None
     if body.latitude is not None and body.longitude is not None:
         location = {"latitude": body.latitude, "longitude": body.longitude}
