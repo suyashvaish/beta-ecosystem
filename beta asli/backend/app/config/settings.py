@@ -3,10 +3,12 @@ Application settings.
 
 All configuration is loaded from environment variables (via a `.env` file in
 local development, or real environment variables in production/Docker).
-We use pydantic-settings so that:
-  - values are validated and type-cast automatically
-  - missing required values fail fast at startup instead of at first use
-  - nothing is hardcoded in the codebase (12-factor app style)
+Values are validated and type-cast automatically; missing required values
+fail fast at startup instead of at first use (12-factor app style).
+
+Beta Ecosystem 2.0: the AI layer is provider-independent. OPENAI_API_KEY
+is now OPTIONAL. The backend starts with a self-hosted (Ollama / vLLM /
+llama.cpp) OpenAI-compatible provider when configured via AI_PROVIDER.
 """
 
 from functools import lru_cache
@@ -32,8 +34,6 @@ class Settings(BaseSettings):
 
     # ---- Security ----------------------------------------------------------
     SECRET_KEY: str = Field(..., description="Used for signing internal tokens")
-    # No wildcard default: allowed origins MUST be configured explicitly.
-    # The app refuses to start if "*" appears in the list.
     ALLOWED_ORIGINS: List[str] = []
     RATE_LIMIT_PER_MINUTE: int = 60
 
@@ -53,14 +53,26 @@ class Settings(BaseSettings):
                 "(e.g. http://localhost:3000) or set ENVIRONMENT=local."
             )
         if not self.ALLOWED_ORIGINS and self.ENVIRONMENT == "local":
-            # Sensible local-only default; still explicit, never a wildcard.
             self.ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:8080"]
         # 2) DEBUG must never be true outside local development.
         if self.ENVIRONMENT in ("staging", "production"):
             self.DEBUG = False
+        # 3) AI provider consistency: the chosen provider must have its
+        #    credentials/endpoint configured, or the app fails fast with a
+        #    clear message instead of an obscure first-request error.
+        if self.AI_PROVIDER == "openai" and not self.OPENAI_API_KEY:
+            raise ValueError(
+                "AI_PROVIDER=openai requires OPENAI_API_KEY. Alternatively "
+                "set AI_PROVIDER=local with LOCAL_AI_BASE_URL (Ollama / "
+                "vLLM / llama.cpp OpenAI-compatible server)."
+            )
+        if self.AI_PROVIDER == "local" and not self.LOCAL_AI_BASE_URL:
+            raise ValueError(
+                "AI_PROVIDER=local requires LOCAL_AI_BASE_URL, e.g. "
+                "http://ollama:11434/v1 (Ollama) or your vLLM endpoint."
+            )
         return self
 
-    # Computed: explicit list of methods/headers instead of ["*"].
     @property
     def ALLOWED_METHODS(self) -> List[str]:
         return ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
@@ -82,31 +94,69 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: str = "firebase-credentials.json"
     FIREBASE_PROJECT_ID: str = "beta-ai-bbc28"
 
-    # ---- OpenAI / AI ---------------------------------------------------------
-    OPENAI_API_KEY: str = Field(..., description="OpenAI API key")
+    # ---- AI provider (Beta Intelligence) --------------------------------------
+    # "openai" keeps the existing Responses-API path. "local" uses any
+    # OpenAI-compatible self-hosted server (Ollama / vLLM / llama.cpp),
+    # letting Beta run on open-weight models like Qwen 2.5 / Gemma 3.
+    AI_PROVIDER: Literal["openai", "local"] = "openai"
+    OPENAI_API_KEY: str = Field(
+        default="",
+        description="OpenAI API key. Only required when AI_PROVIDER=openai.",
+    )
     OPENAI_MODEL: str = "gpt-4.1"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    LOCAL_AI_BASE_URL: str = Field(
+        default="",
+        description="OpenAI-compatible base URL of the self-hosted model "
+        "server, e.g. http://ollama:11434/v1 (dev) or a vLLM endpoint (prod).",
+    )
+    LOCAL_AI_API_KEY: str = Field(
+        default="",
+        description="Optional bearer token for the self-hosted model server "
+        "(llama.cpp/vLLM can require one; Ollama ignores it).",
+    )
+    LOCAL_CHAT_MODEL: str = Field(
+        default="qwen2.5:7b-instruct",
+        description="Chat model on the local server. Recommended: "
+        "qwen2.5:7b-instruct (Apache-2.0, strong Hindi/English, tools).",
+    )
+    LOCAL_EMBEDDING_MODEL: str = Field(
+        default="nomic-embed-text",
+        description="Embedding model on the local server (e.g. Ollama's "
+        "nomic-embed-text, 768 dims). Must match EMBEDDING_DIMENSIONS.",
+    )
     AI_SYSTEM_PROMPT: str = (
-        "You are Beta, a warm, patient, and reliable AI assistant. "
-        "You help the user with daily tasks, reminders, and conversation. "
-        "Keep responses concise and clear."
+        "You are Beta, a warm, patient, and reliable AI assistant for elderly "
+        "people. You help the user with daily tasks, reminders, and "
+        "conversation. You understand English, Hindi, and Hinglish. Keep "
+        "responses concise, clear, and simple - short sentences, no jargon."
     )
     AI_MAX_RETRIES: int = 3
     AI_REQUEST_TIMEOUT_SECONDS: int = 30
+    # Tool-calling guardrails (Beta Intelligence).
+    AI_MAX_TOOL_ROUNDS: int = 4
+    AI_TOOL_CALL_TIMEOUT_SECONDS: int = 10
+    AI_MAX_TOOLS_PER_TURN: int = 8
 
     # ---- Speech (STT/TTS) ------------------------------------------------
     OPENAI_STT_MODEL: str = "whisper-1"
     OPENAI_TTS_MODEL: str = "tts-1"
     OPENAI_TTS_DEFAULT_VOICE: str = "alloy"
-    # Hard limits so a single request cannot exhaust memory or burn
-    # unbounded OpenAI cost (STT input size, TTS text length).
     MAX_AUDIO_UPLOAD_BYTES: int = 25 * 1024 * 1024  # 25 MB
     MAX_TTS_TEXT_LENGTH: int = 4000  # characters
 
     # ---- Memory / Vector store ------------------------------------------------
     VECTOR_DIMENSIONS: int = 1536
+    EMBEDDING_DIMENSIONS: int = 1536
     MEMORY_TOP_K: int = 5
     SHORT_TERM_MEMORY_TURNS: int = 10
+
+    # ---- Search providers (Beta Intelligence) -----------------------------
+    # Credentials are optional: a missing provider means that tool is
+    # unavailable and Beta says so honestly instead of inventing results.
+    GOOGLE_MAPS_API_KEY: str = ""
+    SERPAPI_KEY: str = ""
+    WEB_SEARCH_TIMEOUT_SECONDS: int = 10
 
     # ---- Notifications ---------------------------------------------------------
     FCM_CREDENTIALS_PATH: str = "firebase-credentials.json"
