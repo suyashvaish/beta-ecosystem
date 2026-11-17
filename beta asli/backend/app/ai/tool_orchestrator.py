@@ -6,8 +6,10 @@ Guardrails, in order:
   1. Allowlist: only tools explicitly registered for a user are offered
      to the model as JSON schemas. Unknown tool names from the model are
      rejected, never executed.
-  2. Argument validation: every tool validates its arguments (types,
-     ranges) before doing anything.
+  2. Argument validation: every tool call is validated against the tool's
+     declared schema BEFORE execution - required keys present, values have
+     the declared types, and unknown keys are rejected (model-controlled
+     input never reaches a tool unchecked).
   3. Timeout: each tool execution is bounded by a hard asyncio timeout.
   4. Round budget: a single turn may run at most AI_MAX_TOOL_ROUNDS
      rounds of tool calling - no infinite loops.
@@ -15,7 +17,7 @@ Guardrails, in order:
      inert JSON strings. Web content can never issue commands to Beta.
 
 Tools are async callables with an allowlisted signature. Tool functions
-receive (user, **arguments) - never raw model-controlled execution.
+receive (ctx, **arguments) - never raw model-controlled execution.
 """
 
 import asyncio
@@ -34,6 +36,55 @@ logger = get_logger(__name__)
 ToolFunc = Callable[..., Awaitable[Any]]
 
 
+def _validate_arguments(schema: Dict[str, Any], arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validate model-supplied tool arguments against the tool's schema.
+
+    Enforced (fail-closed, raises AIServiceError):
+      - arguments must be a dict
+      - every key in schema "required" must be present and non-empty
+      - values must match their declared JSON-schema type
+      - keys not present in the schema's properties are rejected
+    Returns a clean copy of the validated arguments.
+    """
+    if not isinstance(arguments, dict):
+        raise AIServiceError("The request arguments were invalid.")
+
+    properties = schema.get("properties", {}) or {}
+    required = schema.get("required", []) or []
+
+    for key in required:
+        if key not in arguments:
+            raise AIServiceError("The request arguments were invalid.")
+        if arguments[key] is None or arguments[key] == "":
+            raise AIServiceError("The request arguments were invalid.")
+
+    for key, value in arguments.items():
+        if key not in properties:
+            # Unknown keys: model cannot smuggle extra parameters in.
+            raise AIServiceError("The request arguments were invalid.")
+        declared = properties[key].get("type")
+        if declared is None:
+            continue
+        ok = False
+        if declared == "string":
+            ok = isinstance(value, str)
+        elif declared == "integer":
+            ok = isinstance(value, int) and not isinstance(value, bool)
+        elif declared == "number":
+            ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+        elif declared == "boolean":
+            ok = isinstance(value, bool)
+        elif declared == "array":
+            ok = isinstance(value, list)
+        elif declared == "object":
+            ok = isinstance(value, dict)
+        if not ok:
+            raise AIServiceError("The request arguments were invalid.")
+
+    return dict(arguments)
+
+
 @dataclass
 class ToolSpec:
     name: str
@@ -46,12 +97,12 @@ class ToolSpec:
 @dataclass
 class ToolContext:
     """Everything a tool may know about the current user/turn."""
-    user: User
+    user: Any = None
     last_known_location: Dict[str, float] = field(default_factory=dict)
 
 
 class ToolRegistry:
-    """Allowlist + executor for AI tools."""
+    """Allowlist + validator + executor for AI tools."""
 
     def __init__(self) -> None:
         self._tools: Dict[str, ToolSpec] = {}
@@ -79,75 +130,30 @@ class ToolRegistry:
             raise AIServiceError(f"Tool '{name}' is not available.")
         if spec.requires_location_permission and not ctx.last_known_location:
             raise AIServiceError("Location permission is required for that.")
+
+        # Guardrail 2: schema validation BEFORE any tool code runs.
+        clean_args = _validate_arguments(spec.parameters, arguments)
+
         try:
             result = await asyncio.wait_for(
-                spec.func(ctx, **arguments),
+                spec.func(ctx, **clean_args),
                 timeout=settings.AI_TOOL_CALL_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError:
             logger.warning("Tool timed out", extra={"extra_fields": {"tool": name}})
             raise AIServiceError("That search took too long; try again.")
+        except AIServiceError:
+            raise
         except TypeError as exc:
-            # Bad argument names/types from the model.
+            # Signature mismatch the schema validator did not catch.
             raise AIServiceError("The request arguments were invalid.") from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Tool execution failed",
+                extra={"extra_fields": {"tool": name, "error": str(exc)}},
+            )
+            raise AIServiceError("That request could not be completed right now.") from exc
         return result
-
-
-def _tool_schemas() -> List[Dict[str, Any]]:
-    """OpenAI-style tool JSON schemas for the default allowlist."""
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": "search_places",
-                "description": "Find places near the user, like a medical "
-                "shop, hospital, pharmacy, ATM, or restaurant.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string"},
-                        "radius_meters": {"type": "integer", "default": 3000},
-                    },
-                    "required": ["query"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "search_products",
-                "description": "Find nearby shops selling an item, like a "
-                "walking stick or a mobile phone.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"query": {"type": "string"}},
-                    "required": ["query"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "search_web",
-                "description": "Search the internet for information the "
-                "assistant does not know.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"query": {"type": "string"}},
-                    "required": ["query"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_current_location",
-                "description": "Get the user's current location if the user "
-                "has granted location permission.",
-                "parameters": {"type": "object", "properties": {}},
-            },
-        },
-    ]
 
 
 # --------------------------------------------------------------------------
@@ -155,9 +161,7 @@ def _tool_schemas() -> List[Dict[str, Any]]:
 # --------------------------------------------------------------------------
 
 async def _tool_search_places(ctx: ToolContext, query: str, radius_meters: int = 3000) -> Any:
-    if not isinstance(query, str) or not query.strip():
-        raise AIServiceError("A search term is needed.")
-    radius = int(radius_meters) if isinstance(radius_meters, (int, float)) else 3000
+    radius = int(radius_meters)
     from app.services.search_service import get_maps_search_service
 
     loc = ctx.last_known_location
@@ -168,8 +172,6 @@ async def _tool_search_places(ctx: ToolContext, query: str, radius_meters: int =
 
 
 async def _tool_search_products(ctx: ToolContext, query: str) -> Any:
-    if not isinstance(query, str) or not query.strip():
-        raise AIServiceError("An item name is needed.")
     from app.services.search_service import get_product_search_service
 
     loc = ctx.last_known_location
@@ -180,8 +182,6 @@ async def _tool_search_products(ctx: ToolContext, query: str) -> Any:
 
 
 async def _tool_search_web(ctx: ToolContext, query: str) -> Any:
-    if not isinstance(query, str) or not query.strip():
-        raise AIServiceError("A search term is needed.")
     from app.services.search_service import get_web_search_service
 
     return await get_web_search_service().search(query.strip())
@@ -207,7 +207,7 @@ def build_default_registry() -> ToolRegistry:
             "type": "object",
             "properties": {
                 "query": {"type": "string"},
-                "radius_meters": {"type": "integer", "default": 3000},
+                "radius_meters": {"type": "integer"},
             },
             "required": ["query"],
         },
