@@ -8,6 +8,11 @@ can discover every table via `Base.metadata`.
 from app.models.user import User
 from app.models.conversation import Conversation
 from app.models.message import Message
+from app.models.family_message import (
+    FamilyConversation,
+    FamilyMessageType,
+    FamilyTalkMessage,
+)
 from app.models.memory import Memory
 from app.models.user_preference import UserPreference
 from app.models.notification import Notification
@@ -20,6 +25,9 @@ __all__ = [
     "User",
     "Conversation",
     "Message",
+    "FamilyConversation",
+    "FamilyMessageType",
+    "FamilyTalkMessage",
     "Memory",
     "UserPreference",
     "Notification",
