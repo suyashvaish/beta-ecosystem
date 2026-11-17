@@ -2,14 +2,14 @@
 Caregiver model.
 
 Represents a caregiver's access relationship to an elderly user's account.
-A caregiver may or may not have their own User row (they might just be
-notified via email/SMS); `caregiver_user_id` is nullable to support both
-cases.
+A caregiver may or may not have their own User row; `caregiver_user_id`
+is nullable to support both cases. In Ecosystem 2.0 this row doubles as
+a care-circle MEMBERSHIP: `care_circle_id` links the member into the
+elder's circle and `circle_role` gives the role-based access level.
 
-`fcm_device_token` holds the caregiver's FCM push token so the backend can
-deliver emergency alerts to registered caregivers. The token is ALWAYS
-populated/owned server-side; clients never supply tokens for other users
-(a client-supplied token list would allow arbitrary push injection).
+`fcm_device_token` holds the caregiver's FCM push token. The token is
+ALWAYS populated/owned server-side; clients never supply tokens for other
+users (a client-supplied token list would allow arbitrary push injection).
 """
 
 import enum
@@ -27,6 +27,12 @@ class CaregiverAccessLevel(str, enum.Enum):
     view_only = "view_only"
     full_access = "full_access"
     emergency_only = "emergency_only"
+
+
+class CircleRole(str, enum.Enum):
+    primary_guardian = "primary_guardian"
+    caregiver = "caregiver"
+    viewer = "viewer"
 
 
 class Caregiver(Base, TimestampMixin):
@@ -47,13 +53,23 @@ class Caregiver(Base, TimestampMixin):
     access_level: Mapped[CaregiverAccessLevel] = mapped_column(
         Enum(CaregiverAccessLevel), default=CaregiverAccessLevel.view_only
     )
+    # ---- Care circle membership (Ecosystem 2.0, Feature D) ----
+    care_circle_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("care_circles.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    circle_role: Mapped[Optional[CircleRole]] = mapped_column(
+        Enum(CircleRole), default=CircleRole.viewer, nullable=True
+    )
     # FCM push token for this caregiver's device. Populated when the
     # caregiver registers their device; used to fan out emergency alerts.
-    # Kept long to tolerate long-lived FCM registration tokens.
     fcm_device_token: Mapped[Optional[str]] = mapped_column(
         String(4096), nullable=True
     )
 
     cared_for_user: Mapped["User"] = relationship(
         back_populates="caregiver_links", foreign_keys=[cared_for_user_id]
+    )
+    care_circle: Mapped[Optional["CareCircle"]] = relationship(
+        back_populates="members", foreign_keys=[care_circle_id]
     )
