@@ -26,6 +26,7 @@ from app.models.emergency_event import (
     EmergencyEvent,
     EmergencyEventStatus,
 )
+from app.models.device_token import DeviceToken
 
 __all__ = [
     "User",
@@ -48,4 +49,5 @@ __all__ = [
     "EmergencyAcknowledgement",
     "EmergencyEvent",
     "EmergencyEventStatus",
+    "DeviceToken",
 ]
