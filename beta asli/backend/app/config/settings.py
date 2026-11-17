@@ -17,6 +17,16 @@ from typing import List, Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Default emergency phrases (spec 5.5). English + Hindi; deployments can
+# extend/override via the EMERGENCY_PHRASES env var (comma-separated).
+_DEFAULT_EMERGENCY_PHRASES = [
+    "help",
+    "emergency",
+    "madad",
+    "mujhe madad chahiye",
+    "bachao",
+]
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -42,6 +52,13 @@ class Settings(BaseSettings):
     def split_origins(cls, v):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
+    @field_validator("EMERGENCY_PHRASES", mode="before")
+    @classmethod
+    def split_phrases(cls, v):
+        if isinstance(v, str):
+            return [p.strip() for p in v.split(",") if p.strip()]
         return v
 
     @model_validator(mode="after")
@@ -71,6 +88,9 @@ class Settings(BaseSettings):
                 "AI_PROVIDER=local requires LOCAL_AI_BASE_URL, e.g. "
                 "http://ollama:11434/v1 (Ollama) or your vLLM endpoint."
             )
+        # 4) Emergency phrases must never be empty (elder safety).
+        if not self.EMERGENCY_PHRASES:
+            raise ValueError("EMERGENCY_PHRASES must contain at least one phrase.")
         return self
 
     @property
@@ -97,7 +117,7 @@ class Settings(BaseSettings):
     # ---- AI provider (Beta Intelligence) --------------------------------------
     # "openai" keeps the existing Responses-API path. "local" uses any
     # OpenAI-compatible self-hosted server (Ollama / vLLM / llama.cpp),
-    # letting Beta run on open-weight models like Qwen 2.5 / Gemma 3.
+    # letting Beta run on open-weight models like Qwen 2.5 or Gemma 3.
     AI_PROVIDER: Literal["openai", "local"] = "openai"
     OPENAI_API_KEY: str = Field(
         default="",
@@ -137,6 +157,13 @@ class Settings(BaseSettings):
     AI_MAX_TOOL_ROUNDS: int = 4
     AI_TOOL_CALL_TIMEOUT_SECONDS: int = 10
     AI_MAX_TOOLS_PER_TURN: int = 8
+
+    # ---- Emergency (spec 5.5) ------------------------------------------------
+    EMERGENCY_PHRASES: List[str] = Field(
+        default_factory=lambda: list(_DEFAULT_EMERGENCY_PHRASES),
+        description="Configurable emergency phrases, comma-separated in env. "
+        "Default: help, emergency, madad, mujhe madad chahiye, bachao.",
+    )
 
     # ---- Speech (STT/TTS) ------------------------------------------------
     OPENAI_STT_MODEL: str = "whisper-1"
