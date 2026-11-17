@@ -21,6 +21,11 @@ from app.models.health_record import HealthRecord
 from app.models.emergency_contact import EmergencyContact
 from app.models.care_circle import CareCircle, CareInvitation, CircleRole
 from app.models.contact_share import ContactShareSession, ShareStatus
+from app.models.emergency_event import (
+    EmergencyAcknowledgement,
+    EmergencyEvent,
+    EmergencyEventStatus,
+)
 
 __all__ = [
     "User",
@@ -40,4 +45,7 @@ __all__ = [
     "CircleRole",
     "ContactShareSession",
     "ShareStatus",
+    "EmergencyAcknowledgement",
+    "EmergencyEvent",
+    "EmergencyEventStatus",
 ]
