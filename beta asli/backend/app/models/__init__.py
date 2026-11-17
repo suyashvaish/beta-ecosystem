@@ -14,6 +14,7 @@ from app.models.notification import Notification
 from app.models.caregiver import Caregiver
 from app.models.health_record import HealthRecord
 from app.models.emergency_contact import EmergencyContact
+from app.models.care_circle import CareCircle, CareInvitation, CircleRole
 
 __all__ = [
     "User",
@@ -25,4 +26,7 @@ __all__ = [
     "Caregiver",
     "HealthRecord",
     "EmergencyContact",
+    "CareCircle",
+    "CareInvitation",
+    "CircleRole",
 ]
