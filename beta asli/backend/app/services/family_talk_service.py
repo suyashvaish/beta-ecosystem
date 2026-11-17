@@ -15,6 +15,10 @@ OTHER participants' registered devices. Delivery failures never lose
 the message - recipients fetch history on next app open (offline
 recovery).
 
+Push routing now resolves tokens from the DeviceToken registry
+(single source of truth) for the elder, plus Caregiver rows for
+members - always server-side, never client-supplied.
+
 Audio: only metadata is stored here. The audio bytes go to storage via
 the speech/upload routes (existing pattern); audio_url must be an
 authenticated https storage URL. This service never accepts raw audio.
@@ -27,7 +31,6 @@ from typing import Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.care_circle import CircleRole  # noqa: F401 (re-export convenience)
 from app.models.family_message import (
     FamilyConversation,
     FamilyMessageType,
@@ -35,6 +38,7 @@ from app.models.family_message import (
 )
 from app.models.user import User
 from app.services.care_circle_service import CareCircleService
+from app.services.device_token_service import DeviceTokenService
 from app.utils.exceptions import AuthorizationError, ValidationError
 from app.utils.logging import get_logger
 
@@ -48,6 +52,7 @@ class FamilyTalkService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.circles = CareCircleService(db)
+        self.devices = DeviceTokenService(db)
 
     # ---------------------------------------------------- conversation
     async def get_or_create_conversation(self, elder_user_id: uuid.UUID) -> FamilyConversation:
@@ -183,8 +188,8 @@ class FamilyTalkService:
     ) -> None:
         """
         Best-effort FCM push to the other participants. NEVER sends to the
-        sender themself. Tokens are resolved server-side from registered
-        Caregiver rows (and the elder's own registered device) - never
+        sender themself. Tokens are resolved server-side: Caregiver rows
+        for members, the DeviceToken registry for the elder - never
         accepted from the client (push-injection rule).
         """
         try:
@@ -201,11 +206,11 @@ class FamilyTalkService:
                 if m.fcm_device_token and m.caregiver_user_id != sender.id
             ]
 
-            # 2) The elder themself (when a child sends to them).
+            # 2) The elder themself (when a child sends to them) - all
+            #    the elder's active devices from the registry.
             if sender.id != elder_user_id:
-                elder_token = await self._elder_device_token(elder_user_id)
-                if elder_token:
-                    tokens.append(elder_token)
+                elder_tokens = await self.devices.active_tokens_for(elder_user_id)
+                tokens.extend(elder_tokens)
 
             if not tokens:
                 return
@@ -242,16 +247,3 @@ class FamilyTalkService:
                 "Family Talk push step failed",
                 extra={"extra_fields": {"error": str(exc)}},
             )
-
-    async def _elder_device_token(self, elder_user_id: uuid.UUID) -> Optional[str]:
-        """
-        The elder's own device token, if registered.
-
-        MVP: resolved from a token registry attached to the elder's
-        profile (future `device_tokens` table); None today. Kept in one
-        place so a real registry table later is a localized change.
-        """
-        elder = await self.db.get(User, elder_user_id)
-        if elder is None:
-            return None
-        return getattr(elder, "fcm_device_token", None)
