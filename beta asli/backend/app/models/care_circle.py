@@ -10,14 +10,15 @@ live on the member (Caregiver) row:
   caregiver        - care data + medication + alerts + Family Talk
   viewer           - limited view + Family Talk per permissions
 
-`CareCircle.role_for(elder_user_id)` resolves the elder themself as
-primary guardian of their own circle.
+The elder themself is implicitly the primary guardian of their own
+circle (checked in the authorization service, not stored).
 """
 
 import enum
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Enum, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,6 +40,7 @@ class CareCircle(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    # One circle per elderly user.
     elder_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True
     )
@@ -68,9 +70,8 @@ class CareInvitation(Base, TimestampMixin):
     proposed_role: Mapped[str] = mapped_column(
         Enum(CircleRole), default=CircleRole.viewer
     )
-    status: Mapped[str] = mapped_column(
-        String(32), default="pending", index=True
-    )  # pending | accepted | revoked | expired
-    expires_at: Mapped[uuid.UUID] = mapped_column(
-        String(64), nullable=True
-    )  # ISO timestamp string; kept as text for simplicity
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    # pending | accepted | revoked | expired
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
