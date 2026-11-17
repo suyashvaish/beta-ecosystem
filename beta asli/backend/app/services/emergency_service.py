@@ -28,8 +28,10 @@ the same elder within EMERGENCY_DEDUPE_SECONDS (default 60) returns the
 existing active event instead of creating a new one.
 
 Notifications: circle member devices via the EXISTING server-side
-caregiver-token fan-out; the elder's own registered device (if any) gets
-a confirmation ping. Never client-supplied tokens (push-injection rule).
+caregiver-token fan-out, PLUS a confirmation ping to the elder's own
+registered devices via the DeviceToken registry (so Beta A can say
+"Your family has been alerted"). Never client-supplied tokens
+(push-injection rule).
 """
 
 import re
@@ -47,6 +49,7 @@ from app.models.emergency_event import (
     EmergencyEventStatus,
 )
 from app.models.user import User
+from app.services.device_token_service import DeviceTokenService
 from app.utils.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.utils.logging import get_logger
 
@@ -97,6 +100,7 @@ class EmergencyService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self._phrases = settings.EMERGENCY_PHRASES
+        self.devices = DeviceTokenService(db)
 
     # -------------------------------------------------------- detection
     def is_emergency_phrase(self, text: str) -> Optional[str]:
@@ -163,6 +167,7 @@ class EmergencyService:
         await self.db.flush()
 
         await self._notify_circle(event, elder_user)
+        await self._notify_elder(event, elder_user)
         return event
 
     # --------------------------------------------------- acknowledgement
@@ -305,5 +310,37 @@ class EmergencyService:
         except Exception as exc:  # noqa: BLE001
             logger.error(
                 "Emergency notification step failed",
+                extra={"extra_fields": {"error": str(exc)}},
+            )
+
+    async def _notify_elder(self, event: EmergencyEvent, elder: User) -> None:
+        """
+        Confirmation ping to the elder's OWN registered devices, so Beta
+        can honestly say "your family has been alerted". Resolved from
+        the DeviceToken registry server-side; never client input.
+        """
+        try:
+            from app.notifications.fcm_client import send_push
+
+            tokens = await self.devices.active_tokens_for(elder.id)
+            for token in tokens:
+                try:
+                    send_push(
+                        device_token=token,
+                        title="Emergency alert sent",
+                        body="Your family has been notified. Help is on the way.",
+                        data={
+                            "notification_type": "emergency_confirmation",
+                            "event_id": str(event.id),
+                        },
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Emergency confirmation push failed for one device",
+                        extra={"extra_fields": {"error": str(exc)}},
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Emergency elder-confirmation step failed",
                 extra={"extra_fields": {"error": str(exc)}},
             )
