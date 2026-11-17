@@ -11,11 +11,15 @@ Phrase matching details:
   - Phrases come from settings.EMERGENCY_PHRASES (configurable per
     deployment, additional languages without code changes).
   - Text is normalized (lowercase, whitespace collapse, strip common
-    punctuation) before substring matching, so "Madad!!" matches
-    "madad".
+    punctuation) before matching, so "Madad!!" matches "madad".
   - Whole-phrase matching for short tokens to avoid matching inside
     ordinary words (e.g. "help" must not fire on "helped" trivially -
     we match on word boundaries for single short words).
+  - LONGEST-match preference: when several configured phrases match
+    (e.g. "madad" and "mujhe madad chahiye" both match "Mujhe madad
+    chahiye!!"), the most specific (longest) phrase is reported - so
+    the audit trail and family notifications quote what the elder
+    actually said, not a fragment.
   - The CLIENT may also do on-device pre-detection (faster); the
     backend re-validates as defence in depth.
 
@@ -61,28 +65,32 @@ def normalize_text(text: str) -> str:
     return t.strip(" .!?,")
 
 
+def _phrase_matches(target: str, normalized: str) -> bool:
+    """Single words match on word boundaries; longer phrases as substrings."""
+    if " " in target:
+        return target in normalized
+    return bool(re.search(rf"\b{re.escape(target)}\b", normalized))
+
+
 def detect_emergency_phrase(text: str) -> Optional[str]:
     """
-    Return the configured phrase that triggered an emergency, or None.
-
-    Single short words are matched on word boundaries; longer phrases
-    are matched as substrings after normalization.
+    Return the most specific configured phrase that triggered an
+    emergency, or None. When multiple phrases match, the LONGEST
+    (most specific) one wins.
     """
     normalized = normalize_text(text)
     if not normalized:
         return None
+    best: Optional[str] = None
+    best_len = 0
     for phrase in settings.EMERGENCY_PHRASES:
         target = normalize_text(phrase)
         if not target:
             continue
-        if " " in target:
-            if target in normalized:
-                return phrase
-        else:
-            # Single word: word-boundary match.
-            if re.search(rf"\b{re.escape(target)}\b", normalized):
-                return phrase
-    return None
+        if _phrase_matches(target, normalized) and len(target) > best_len:
+            best = phrase
+            best_len = len(target)
+    return best
 
 
 class EmergencyService:
