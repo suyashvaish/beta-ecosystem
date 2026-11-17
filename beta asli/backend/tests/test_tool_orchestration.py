@@ -4,13 +4,12 @@ Tests for Beta Intelligence tool orchestration (Feature A).
 Focus: the guardrails, not the live model:
   - unknown tool names are rejected, never executed
   - argument validation rejects bad types
-  - timeouts surface as honest errors
+  - timeouts surface as honest errors from the registry itself
   - tool results are inert JSON for the model
   - schemas_for_model exposes only the allowlist
 """
 
 import asyncio
-import json
 
 import pytest
 
@@ -37,18 +36,28 @@ async def test_unknown_tool_rejected():
 @pytest.mark.asyncio
 async def test_bad_arguments_rejected():
     registry = ToolRegistry()
+
+    async def echo(ctx, text):
+        return text
+
     registry.register(ToolSpec(
         name="echo",
         description="echo",
         parameters={"type": "object", "properties": {"text": {"type": "string"}}},
-        func=lambda ctx, text: text,
+        func=echo,
     ))
+    # Non-string argument: registry must reject before the tool runs.
     with pytest.raises(AIServiceError):
         await registry.execute("echo", {"text": 12345}, ToolContext(user=_FakeUser()))
 
 
 @pytest.mark.asyncio
 async def test_timeout_surfaces_error():
+    """
+    The registry's own asyncio.wait_for(AI_TOOL_CALL_TIMEOUT_SECONDS=10)
+    must cancel a stuck tool and raise AIServiceError (not TimeoutError).
+    The tool sleeps 60s so only the registry guardrail can fire.
+    """
     registry = ToolRegistry()
 
     async def slow(ctx):
@@ -60,9 +69,7 @@ async def test_timeout_surfaces_error():
     ))
     ctx = ToolContext(user=_FakeUser())
     with pytest.raises(AIServiceError):
-        await asyncio.wait_for(
-            registry.execute("slow", {}, ctx), timeout=3
-        )
+        await registry.execute("slow", {}, ctx)
 
 
 @pytest.mark.asyncio
@@ -88,7 +95,7 @@ async def test_location_required_for_places_search():
 @pytest.mark.asyncio
 async def test_registry_allows_only_registered():
     registry = build_default_registry()
-    # "search_places" is registered; fake tools that were never
-    # registered must not be executable even if the model names them.
+    # "search_places" is registered; tools that were never registered
+    # must not be executable even if the model names them.
     with pytest.raises(AIServiceError):
         await registry.execute("send_family_message", {}, ToolContext(user=_FakeUser()))
