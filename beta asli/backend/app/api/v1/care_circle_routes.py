@@ -11,14 +11,15 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models.care_circle import CircleRole
+from app.models.caregiver import Caregiver
 from app.models.user import User
 from app.services.care_circle_service import CareCircleService
-from app.utils.rate_limit import rate_limiter
 
 router = APIRouter(prefix="/care-circles", tags=["care-circles"])
 
@@ -69,13 +70,12 @@ async def circle_for_elder(
     await service.require_role(user.id, elder_user_id, CircleRole.viewer)
     circle = await service.get_or_create_circle(elder_user_id)
     members = await service.members_of(circle.id)
+    your_role = await service.role_of(user.id, elder_user_id)
     return {
         "circle_id": str(circle.id),
         "name": circle.name,
         "members": [_member_out(m) for m in members],
-        "your_role": (await service.role_of(user.id, elder_user_id)).value
-        if await service.role_of(user.id, elder_user_id)
-        else None,
+        "your_role": your_role.value if your_role else None,
     }
 
 
@@ -85,7 +85,6 @@ async def create_invitation(
     user: User = Depends(get_current_user),
     service: CareCircleService = Depends(get_service),
 ):
-    rate_limiter.check(f"invite:{user.id}")
     invitation = await service.create_invitation(
         elder_user_id=payload.elder_user_id,
         invited_by_user_id=user.id,
@@ -159,10 +158,6 @@ async def my_elders(
     db: AsyncSession = Depends(get_db),
 ):
     """Elders this user cares for (care-circle switching in Beta Care)."""
-    from sqlalchemy import select
-
-    from app.models.caregiver import Caregiver
-
     stmt = select(Caregiver).where(Caregiver.caregiver_user_id == user.id)
     result = await db.execute(stmt)
     rows = result.scalars().all()
