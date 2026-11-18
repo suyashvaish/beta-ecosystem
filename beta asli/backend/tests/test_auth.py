@@ -12,7 +12,7 @@ from app.utils.exceptions import AuthenticationError
 def test_verify_id_token_success():
     with patch("app.auth.firebase.get_firebase_app"), patch(
         "app.auth.firebase.firebase_auth.verify_id_token",
-        return_value={"uid": "abc123", "email": "user@example.com"},
+        return_value={"uid": "abc123", "email": "user@example.com", "email_verified": True},
     ):
         decoded = verify_id_token("fake-token")
     assert decoded["uid"] == "abc123"
@@ -48,3 +48,12 @@ async def test_user_repository_update_profile(db_session, test_user):
     repo = UserRepository(db_session)
     updated = await repo.update_profile(test_user, display_name="Grandma Rose")
     assert updated.display_name == "Grandma Rose"
+
+
+def test_verify_id_token_rejects_unverified_email():
+    with patch("app.auth.firebase.get_firebase_app"), patch(
+        "app.auth.firebase.firebase_auth.verify_id_token",
+        return_value={"uid": "abc123", "email": "user@example.com", "email_verified": False},
+    ):
+        with pytest.raises(AuthenticationError):
+            verify_id_token("fake-token")
