@@ -16,10 +16,19 @@ class ChatMessage {
     required this.role,
     this.text = '',
     this.status = ChatMessageStatus.complete,
-  });
+    DateTime? time,
+    this.viaVoice = false,
+  }) : time = time ?? DateTime.now();
 
   final String id;
   final ChatRole role;
   String text;
   ChatMessageStatus status;
+
+  /// When the turn happened; defaults to now at creation time.
+  final DateTime time;
+
+  /// True when this turn came in through the microphone (STT) rather
+  /// than the keyboard. Drives the small mic marker in the chat UI.
+  final bool viaVoice;
 }
