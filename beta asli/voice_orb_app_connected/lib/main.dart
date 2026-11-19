@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
-
 import 'screens/voice_home_page.dart';
 import 'services/auth_service.dart';
 import 'services/settings_service.dart';
+import 'theme/beta_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,11 +59,11 @@ class _VoiceOrbAppState extends State<VoiceOrbApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Beta',
+      title: 'Beta Asli',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.light(useMaterial3: true),
-      darkTheme: ThemeData.dark(useMaterial3: true),
-      themeMode: SettingsService.instance.flutterThemeMode,
+      theme: BetaTheme.dark(),
+      darkTheme: BetaTheme.dark(),
+      themeMode: ThemeMode.dark,
       home: widget.firebaseInitError != null
           ? _SetupNeededScreen(message: widget.firebaseInitError!)
           : AuthGate(authService: AuthService()),
@@ -85,7 +85,7 @@ class AuthGate extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            backgroundColor: Colors.black,
+            backgroundColor: BetaColors.background,
             body: Center(child: CircularProgressIndicator()),
           );
         }
@@ -107,7 +107,7 @@ class _SetupNeededScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: BetaColors.background,
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -115,12 +115,16 @@ class _SetupNeededScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.settings_suggest, color: Colors.white54, size: 48),
+                const Icon(
+                  Icons.settings_suggest,
+                  color: BetaColors.textSecondary,
+                  size: 48,
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   'Setup needed',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: BetaColors.textPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                   ),
@@ -129,7 +133,11 @@ class _SetupNeededScreen extends StatelessWidget {
                 Text(
                   message,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white60, fontSize: 14, height: 1.5),
+                  style: const TextStyle(
+                    color: BetaColors.textSecondary,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
                 ),
               ],
             ),
