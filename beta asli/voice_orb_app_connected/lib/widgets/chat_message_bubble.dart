@@ -40,29 +40,20 @@ class ChatMessageBubble extends StatelessWidget {
     final bool showTyping =
         isEmpty && message.status == ChatMessageStatus.streaming;
 
-    final Widget content = _isUser
-        ? _buildUserBubble()
-        : _buildAssistantCard(showTyping);
+    final Widget content =
+        _isUser ? _buildUserBubble() : _buildAssistantCard(showTyping);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: message.role == ChatRole.user
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                content,
-                const SizedBox(height: 6),
-                _buildMetaRow(),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                content,
-                const SizedBox(height: 6),
-                _buildMetaRow(),
-              ],
-            ),
+      child: Column(
+        crossAxisAlignment:
+            _isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          content,
+          const SizedBox(height: 6),
+          _buildMetaRow(),
+        ],
+      ),
     );
   }
 
@@ -74,7 +65,7 @@ class ChatMessageBubble extends StatelessWidget {
     return Align(
       alignment: Alignment.centerRight,
       child: Container(
-        margin: const EdgeInsets.only(left:  48),
+        margin: const EdgeInsets.only(left: 48),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: BetaColors.card,
@@ -98,8 +89,6 @@ class ChatMessageBubble extends StatelessWidget {
     );
   }
 
-  // _buildUserBubble margin fix note: kept the linter-friendly single space
-
   // -------------------------------------------------------------------------
   // ASSISTANT CARD
   // -------------------------------------------------------------------------
@@ -121,10 +110,8 @@ class ChatMessageBubble extends StatelessWidget {
 
     final Widget card = Container(
       margin: const EdgeInsets.only(right: 32),
-      fully_padded_marker
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        invalid_line_marker
         color: BetaColors.backgroundSecondary,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(4),
@@ -159,8 +146,6 @@ class ChatMessageBubble extends StatelessWidget {
   // META ROW (timestamp + mic marker + retry)
   // -------------------------------------------------------------------------
 
-  Widget methods_placeholder_marker
-
   Widget _buildMetaRow() {
     final List<Widget> items = [
       Text(_formatTime(message.time), style: BetaText.timestamp),
@@ -169,11 +154,15 @@ class ChatMessageBubble extends StatelessWidget {
     if (message.viaVoice) {
       items.addAll([
         const SizedBox(width: 6),
-        Icon(Icons.mic_rounded, size:  12, color: BetaColors.textSecondary),
+        const Icon(
+          Icons.mic_rounded,
+          size: 12,
+          color: BetaColors.textSecondary,
+        ),
       ]);
     }
 
-    if (message.status == ChatErrorPlaceHolder.status) {
+    if (message.status == ChatMessageStatus.error) {
       items.addAll([
         const SizedBox(width: 12),
         InkWell(
@@ -181,7 +170,7 @@ class ChatMessageBubble extends StatelessWidget {
           child: Text(
             'Retry',
             style: BetaText.timestamp.copyWith(
-              color: BetaErrorsPlaceholder,
+              color: BetaColors.error,
               fontWeight: FontWeight.w600,
             ),
           ),
