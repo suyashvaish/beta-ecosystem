@@ -41,7 +41,7 @@ class ChatMessageBubble extends StatelessWidget {
         isEmpty && message.status == ChatMessageStatus.streaming;
 
     final Widget content =
-        _isUser ? _buildUserBubble() : _buildAssistantCard(showTyping);
+        _isUser ? _buildUserBubble() : _buildAssistantCard(context, showTyping);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -75,10 +75,10 @@ class ChatMessageBubble extends StatelessWidget {
             bottomLeft: Radius.circular(20),
             bottomRight: Radius.circular(4),
           ),
-          border: Border.all(color: BetaColors.purple.withOpacity(0.35)),
+          border: Border.all(color: BetaColors.purple.withValues(alpha: 0.35)),
           boxShadow: [
             BoxShadow(
-              color: BetaColors.purple.withOpacity(0.13),
+              color: BetaColors.purple.withValues(alpha: 0.13),
               blurRadius: 20,
               offset: const Offset(0, 4),
             ),
@@ -93,7 +93,7 @@ class ChatMessageBubble extends StatelessWidget {
   // ASSISTANT CARD
   // -------------------------------------------------------------------------
 
-  Widget _buildAssistantCard(bool showTyping) {
+  Widget _buildAssistantCard(BuildContext context, bool showTyping) {
     final Widget body;
 
     if (showTyping) {

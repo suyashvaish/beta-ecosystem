@@ -1,3 +1,4 @@
+import "package:flutter/foundation.dart";
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -126,13 +127,13 @@ class _WaveformPainter extends CustomPainter {
       path.close();
 
       final Paint fill = Paint()
-        ..color = color.withOpacity(0.08 + 0.05 * layer)
+        ..color = color.withValues(alpha: 0.08 + 0.05 * layer)
         ..style = PaintingStyle.fill;
       canvas.drawPath(path, fill);
 
       // Soft glowing stroke.
       final Paint stroke = Paint()
-        ..color = color.withOpacity(0.55)
+        ..color = color.withValues(alpha: 0.55)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.6
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
