@@ -181,9 +181,14 @@ class Settings(BaseSettings):
     # ---- Search providers (Beta Intelligence) -----------------------------
     # Credentials are optional: a missing provider means that tool is
     # unavailable and Beta says so honestly instead of inventing results.
+    # Web search tries providers in this order: Tavily -> SerpApi ->
+    # DuckDuckGo (keyless). WEB_SEARCH_PROVIDERS overrides the order or
+    # restricts which are used, comma-separated (e.g. "duckduckgo" only).
     GOOGLE_MAPS_API_KEY: str = ""
     SERPAPI_KEY: str = ""
+    TAVILY_API_KEY: str = ""
     WEB_SEARCH_TIMEOUT_SECONDS: int = 10
+    WEB_SEARCH_PROVIDERS: str = "tavily,serpapi,duckduckgo"
 
     # ---- Notifications ---------------------------------------------------------
     FCM_CREDENTIALS_PATH: str = "firebase-credentials.json"
