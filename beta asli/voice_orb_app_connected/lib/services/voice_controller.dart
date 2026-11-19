@@ -39,6 +39,9 @@
 //    level) restarts [silenceTimeout]; when it fires with a transcript
 //    in hand, the best transcript is finalized through the same
 //    onFinalTranscript path the recognizer's own final result uses.
+//    The same finalization also covers a recognizer that stops ITSELF
+//    (native pauseFor / listenFor cutoff) with only a partial in hand -
+//    that partial IS the user's sentence and is never discarded.
 //    Auto-submit is therefore deterministic on every device.
 
 import 'dart:async';
@@ -88,7 +91,8 @@ class VoiceController {
   static const int _maxConsecutiveNoResults = 2;
 
   /// Best transcript seen so far in the current listen window; finalized
-  /// by the silence debounce if the recognizer never emits finalResult.
+  /// by the silence debounce or by a recognizer self-stop if the
+  /// recognizer never emits finalResult.
   String _latestTranscript = '';
 
   /// The silence debounce itself; null while no speech has been captured.
@@ -98,8 +102,8 @@ class VoiceController {
   /// (background hiss stays below this on typical phone mics).
   static const double _speechLevelThreshold = 0.15;
 
-  /// Guard so the debounce and the recognizer's own final result can't
-  /// both finalize the same utterance.
+  /// Guard so the debounce, a recognizer self-stop, and the recognizer's
+  /// own final result can't all finalize the same utterance.
   bool _finalizing = false;
 
   /// Completion signal for "speech actually started".
@@ -241,10 +245,10 @@ class VoiceController {
         onSoundLevelChange: _handleSoundLevel,
         listenOptions: SpeechListenOptions(
           listenFor: const Duration(seconds: 30),
-          // 3s of silence ends the turn - long enough for elderly users
-          // to finish a sentence, short enough to avoid recognizer drift.
-          // Devices that ignore this are covered by the controller's own
-          // silence debounce (see _resetSilenceTimer).
+          // 3s of silence ends the turn on compliant devices; devices
+          // that ignore it (or stop without a final result) are covered
+          // by the controller's own silence debounce and the
+          // finalize-on-self-stop path in _handleSttStatus.
           pauseFor: const Duration(seconds: 3),
           cancelOnError: false,
           partialResults: true,
@@ -284,7 +288,7 @@ class VoiceController {
   }
 
   // =========================================================================
-  // SILENCE DEBOUNCE (auto-finalize)
+  // AUTO-FINALIZE (silence debounce + recognizer self-stop)
   // =========================================================================
 
   /// Restarts the silence countdown. Any partial transcript or audible
@@ -305,20 +309,24 @@ class VoiceController {
     _silenceTimer = null;
     if (_disposed || _finalizing) return;
     if (!_listenInProgress) return;
-    final String transcript = _latestTranscript.trim();
-    if (transcript.isEmpty) return;
+    if (_latestTranscript.trim().isEmpty) return;
+    await _finalizeTranscript();
+  }
 
-    // The recognizer ignored its own pauseFor window (device-dependent)
-    // or is still streaming partials - finalize manually through the
-    // exact same path a native finalResult would take, so the UI and
-    // the hands-free loop behave identically.
+  /// Submits the best transcript through the exact same path a native
+  /// finalResult takes. Shared by the silence debounce and the
+  /// recognizer-self-stop path so the UI and the hands-free loop behave
+  /// identically no matter which one fires.
+  Future<void> _finalizeTranscript() async {
+    if (_disposed || _finalizing) return;
     _finalizing = true;
+    _cancelSilenceTimer();
     _listenInProgress = false;
     try {
       await _speech.stop();
     } catch (_) {}
     _setState(VoiceState.processing);
-    onFinalTranscript?.call(transcript);
+    onFinalTranscript?.call(_latestTranscript.trim());
   }
 
   void _handleSttResult(SpeechRecognitionResult result) {
@@ -353,6 +361,19 @@ class VoiceController {
     if (status == 'done' || status == 'notListening') {
       _cancelSilenceTimer();
 
+      // The recognizer ended on its own (native pauseFor silence window
+      // or listenFor cutoff) while a partial transcript was still pending
+      // and no final result ever arrived. That partial IS the user's
+      // sentence: finalize it instead of discarding it and restarting.
+      // (When a final result did arrive, _listenInProgress is already
+      // false and this branch is skipped.)
+      if (!_finalizing &&
+          _listenInProgress &&
+          _latestTranscript.trim().isNotEmpty) {
+        unawaited(_finalizeTranscript());
+        return;
+      }
+
       // A final result (or the debounce) sets _listenInProgress=false
       // BEFORE the status arrives, so "still in progress" means no speech
       // was captured.
@@ -380,8 +401,9 @@ class VoiceController {
   Future<void> _scheduleRestart() async {
     // Give the recognizer a moment to fully release before re-listening;
     // immediate re-listen calls are a known source of permanent
-    // recognizer errors on Android.
-    await Future<void>.delayed(const Duration(milliseconds: 350));
+    // recognizer errors on Android (ERROR_CLIENT / ERROR_RECOGNIZER_BUSY
+    // appear when the previous session is not fully torn down yet).
+    await Future<void>.delayed(const Duration(milliseconds: 600));
     if (_disposed || !_handsFreeSession || _listenInProgress) return;
     if (_state != VoiceState.listening) return;
     _latestTranscript = '';
@@ -410,7 +432,12 @@ class VoiceController {
     final String errorText = error.toString().toLowerCase();
 
     if (errorText.contains('error_no_match') ||
-        errorText.contains('error_speech_timeout')) {
+        errorText.contains('error_speech_timeout') ||
+        // ERROR_CLIENT commonly fires when the recognizer is restarted
+        // soon after a stop. Treat it like a no-match (bounded restart),
+        // not a hard failure - otherwise it dead-ends the hands-free
+        // loop on devices that need a moment between sessions.
+        errorText.contains('error_client')) {
       // Expected, not a fault: nothing intelligible was captured.
       _cancelSilenceTimer();
       _listenInProgress = false;
