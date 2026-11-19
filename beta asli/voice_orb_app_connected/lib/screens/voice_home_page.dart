@@ -15,12 +15,12 @@ import 'settings_screen.dart';
 /// The redesigned Beta home experience.
 ///
 /// Three visual states (from the reference design):
-///   1. HOME / greeting - "Good Day / How can I help?" with the gradient
-///      mic button and "Ask anything..." input.
+///   1. HOME / greeting - "Good Day / How can I help?" with the
+///      "Ask anything..." input.
 ///   2. VOICE - layered waveform replacing the old orb, driven by REAL
-///      mic dB levels from VoiceController.
+///      mic dB levels from VoiceController, with the stop button.
 ///   3. CHAT - the conversation list (now actually rendered - the old
-///      page showed only a single caption), reused ChatApiService
+///      page showed only a single caption), reusing ChatApiService
 ///      streaming underneath.
 ///
 /// All voice/chat logic is delegated to VoiceController and
@@ -35,12 +35,13 @@ class VoiceHomePage extends StatefulWidget {
   State<VoiceHomePage> createState() => _VoiceHomePageState();
 }
 
-class _VoiceHomePageState extends State<VoiceHomePage>
-    with SingleTickerProviderStateMixin {
+class _VoiceHomePageState extends State<VoiceHomePage> {
   // =========================================================================
   // STATE
   // =========================================================================
 
+  /// Real-time 0..1 mic level. A ValueNotifier so high-frequency level
+  /// updates repaint the waveform without rebuilding the whole screen.
   final ValueNotifier<double> _audioLevel = ValueNotifier<double>(0.0);
 
   _AssistantState _state = _AssistantState.idle;
@@ -61,8 +62,6 @@ class _VoiceHomePageState extends State<VoiceHomePage>
 
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-
-  static const _AssistantState idle_ = _AssistantState.idle;
 
   // =========================================================================
   // INIT / DISPOSE
@@ -92,6 +91,8 @@ class _VoiceHomePageState extends State<VoiceHomePage>
     _inputController.dispose();
     _scrollController.dispose();
     _audioLevel.dispose();
+    // Fire-and-forget: the controller stops STT/TTS and cleans up; no
+    // UI remains to await the result.
     unawaited(_voice.dispose());
     _chatApi.dispose();
     super.dispose();
@@ -146,9 +147,6 @@ class _VoiceHomePageState extends State<VoiceHomePage>
   void _onVoiceError(String message) {
     if (!mounted) return;
 
-    // Errors show inline in the chat list (and the pill goes red) rather
-    // than killing the UI - the old behaviour of leaving a caption is
-    // preserved as an inline error card.
     setState(() {
       _errorMessage = message;
       if (_messages.isNotEmpty &&
@@ -179,6 +177,7 @@ class _VoiceHomePageState extends State<VoiceHomePage>
     _messageBeingSent = true;
 
     try {
+      // Make sure the microphone is closed while the request streams in.
       await _voice.stopListening();
 
       try {
@@ -193,11 +192,13 @@ class _VoiceHomePageState extends State<VoiceHomePage>
 
       if (!viaVoice) _inputController.clear();
 
+      final int stamp = DateTime.now().millisecondsSinceEpoch;
+
       setState(() {
         _state = _AssistantState.thinking;
 
         _messages.add(ChatMessage(
-          id: 'user-${DateTime.now().millisecondsSinceEpoch}',
+          id: 'user-$stamp',
           role: ChatRole.user,
           text: message,
           viaVoice: viaVoice,
@@ -206,7 +207,7 @@ class _VoiceHomePageState extends State<VoiceHomePage>
         // Placeholder assistant turn: streaming status renders the
         // typing indicator until the first chunk arrives.
         _messages.add(ChatMessage(
-          id: 'beta-${DateTime.now().millisecondsSinceEpoch}',
+          id: 'beta-$stamp',
           role: ChatRole.assistant,
           text: '',
           status: ChatMessageStatus.streaming,
@@ -253,7 +254,9 @@ class _VoiceHomePageState extends State<VoiceHomePage>
                 _messages.last.status = ChatMessageStatus.complete;
               });
 
-              unawaited(_speakAssistantResponse(response, viaVoice: viaVoice));
+              unawaited(
+                _speakAssistantResponse(response, viaVoice: viaVoice),
+              );
 
             case ChatStreamError():
               setState(() {
@@ -307,8 +310,10 @@ class _VoiceHomePageState extends State<VoiceHomePage>
   // TTS (delegates to the fixed VoiceController)
   // =========================================================================
 
-  Future<void> _speakAssistantResponse(String text,
-      {required bool viaVoice}) async {
+  Future<void> _speakAssistantResponse(
+    String text, {
+    required bool viaVoice,
+  }) async {
     if (text.trim().isEmpty) {
       if (!mounted) return;
       setState(() => _state = _AssistantState.idle);
@@ -325,6 +330,8 @@ class _VoiceHomePageState extends State<VoiceHomePage>
     }
 
     if (viaVoice) {
+      // Re-arm the hands-free loop; the controller handles audio focus
+      // handover before it opens the microphone.
       await _voice.startListening(handsFree: true);
     } else {
       setState(() => _state = _AssistantState.idle);
@@ -463,7 +470,7 @@ class _VoiceHomePageState extends State<VoiceHomePage>
         children: [
           CircleIconButton(
             icon: Icons.menu_rounded,
-            tooltip: 'Clear conversation',
+            tooltip: 'Menu',
             onTap: _showMenuSheet,
           ),
           StatusPill(
@@ -491,10 +498,10 @@ class _VoiceHomePageState extends State<VoiceHomePage>
         ],
       ),
     );
-bar_placeholder_marker
+  }
 
   // -------------------------------------------------------------------------
-  // MENU SHEET (drawer replacement)
+  // MENU SHEET (menu icon action)
   // -------------------------------------------------------------------------
 
   void _showMenuSheet() {
@@ -504,7 +511,7 @@ bar_placeholder_marker
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -523,7 +530,7 @@ bar_placeholder_marker
                 icon: Icons.chat_bubble_outline_rounded,
                 label: 'Clear conversation',
                 onTap: () {
-                  Navigator.of(context).pop();
+                  Navigator.of(sheetContext).pop();
                   _clearConversation();
                 },
               ),
@@ -531,7 +538,7 @@ bar_placeholder_marker
                 icon: Icons.logout_rounded,
                 label: 'Sign out',
                 onTap: () {
-                  Navigator.of(context).pop();
+                  Navigator.of(sheetContext).pop();
                   widget.authService.signOut();
                 },
               ),
@@ -563,7 +570,6 @@ bar_placeholder_marker
     final bool listening = _voice.isListening;
 
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Expanded(
           child: Center(
@@ -589,14 +595,17 @@ bar_placeholder_marker
                       children: [
                         Text('Good Day', style: BetaText.greeting),
                         const SizedBox(height: 8),
-                        Text(
-                          'How can I help?',
-                          style: BetaText.greetingSub,
-                        ),
+                        Text('How can I help?', style: BetaText.greetingSub),
                       ],
                     ),
             ),
           ),
+        ),
+        const SizedBox(height: 24),
+        GradientMicButton(
+          icon: listening ? Icons.stop_rounded : Icons.mic_rounded,
+          active: listening,
+          onTap: _onMicTap,
         ),
       ],
     );
@@ -607,25 +616,20 @@ bar_placeholder_marker
   // -------------------------------------------------------------------------
 
   Widget _buildChatView() {
-    return Column(
+    return Padding(
       key: const ValueKey('chat'),
-      children: list_placeholder_marker
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: ListView.builder(
-            controller: _scrollController,
-            reverse: false,
-            padding: const EdgeInsets.only(top: 8, bottom: 8),
-            itemCount: _messages.length,
-            itemBuilder: (context, index) {
-              return ChatMessageBubble(
-                message: _messages[index],
-                onRetry: _retryMessage,
-              );
-            },
-          ),
-        ),
-      ],
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.only(top: 8, bottom: 8),
+        itemCount: _messages.length,
+        itemBuilder: (context, index) {
+          return ChatMessageBubble(
+            message: _messages[index],
+            onRetry: _retryMessage,
+          );
+        },
+      ),
     );
   }
 
@@ -634,6 +638,7 @@ bar_placeholder_marker
   // -------------------------------------------------------------------------
 
   Widget _buildBottomBar() {
+    final bool listening = _voice.isListening;
     final bool canSend = _inputController.text.trim().isNotEmpty &&
         !_messageBeingSent &&
         _state != _AssistantState.thinking &&
@@ -675,22 +680,37 @@ bar_placeholder_marker
                         ),
                         border: InputBorder.none,
                         isCollapsed: true,
-is_collapsed_marker
                       ),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  CircleIconButton(
-                    icon: Icons.mic_rounded,
-                    size: 40,
-                    iconColor: listening_placeholder_marker
-                        ? BetaColors.purple
-                        : BetaColors.textSecondary,
-                    onTap: _onMicTap,
+                  Material(
+                    color: canSend ? Colors.white : Colors.white38,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: canSend ? _sendTypedMessage : null,
+                      child: const SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Icon(
+                          Icons.arrow_upward,
+                          color: Colors.black,
+                          size: 22,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
+          ),
+          const SizedBox(width: 12),
+          GradientMicButton(
+            icon: listening ? Icons.stop_rounded : Icons.mic_rounded,
+            active: listening,
+            size: 54,
+            onTap: _onMicTap,
           ),
         ],
       ),
