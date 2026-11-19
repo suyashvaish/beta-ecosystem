@@ -30,6 +30,16 @@
 //    start/completion/error handlers and only treat a response as spoken
 //    once the platform start handler fires (with a timeout fallback so a
 //    broken engine surfaces a real error).
+//
+// 5. Recognizer never emitting a final result:
+//    some devices ignore the pauseFor silence window and keep returning
+//    partials until the hard listenFor cutoff, forcing the user to tap
+//    a button to submit. This controller now runs its OWN silence
+//    debounce: every speech activity (partial transcript or real audio
+//    level) restarts [silenceTimeout]; when it fires with a transcript
+//    in hand, the best transcript is finalized through the same
+//    onFinalTranscript path the recognizer's own final result uses.
+//    Auto-submit is therefore deterministic on every device.
 
 import 'dart:async';
 
@@ -48,6 +58,7 @@ class VoiceController {
     this.onPartialTranscript,
     this.onFinalTranscript,
     this.onError,
+    this.silenceTimeout = const Duration(seconds: 10),
   });
 
   final void Function(VoiceState state)? onStateChanged;
@@ -55,6 +66,13 @@ class VoiceController {
   final void Function(String transcript)? onPartialTranscript;
   final void Function(String transcript)? onFinalTranscript;
   final void Function(String message)? onError;
+
+  /// How long the user may fall silent before the controller treats the
+  /// utterance as complete and submits it automatically. Restarted by
+  /// every partial transcript and every non-trivial audio level, so it
+  /// measures "time since the user last spoke", not time since listen
+  /// started. Default 10s per product request.
+  final Duration silenceTimeout;
 
   final SpeechToText _speech = SpeechToText();
   final FlutterTts _tts = FlutterTts();
@@ -68,6 +86,21 @@ class VoiceController {
   /// Consecutive recognizer endings with no captured speech.
   int _consecutiveNoResults = 0;
   static const int _maxConsecutiveNoResults = 2;
+
+  /// Best transcript seen so far in the current listen window; finalized
+  /// by the silence debounce if the recognizer never emits finalResult.
+  String _latestTranscript = '';
+
+  /// The silence debounce itself; null while no speech has been captured.
+  Timer? _silenceTimer;
+
+  /// Level above which incoming audio counts as "the user is speaking"
+  /// (background hiss stays below this on typical phone mics).
+  static const double _speechLevelThreshold = 0.15;
+
+  /// Guard so the debounce and the recognizer's own final result can't
+  /// both finalize the same utterance.
+  bool _finalizing = false;
 
   /// Completion signal for "speech actually started".
   Completer<bool>? _ttsStartCompleter;
@@ -195,6 +228,8 @@ class VoiceController {
 
     _handsFreeSession = _handsFreeSession || handsFree;
     _consecutiveNoResults = 0;
+    _latestTranscript = '';
+    _finalizing = false;
     _listenInProgress = true;
     _setState(VoiceState.listening);
 
@@ -208,6 +243,8 @@ class VoiceController {
           listenFor: const Duration(seconds: 30),
           // 3s of silence ends the turn - long enough for elderly users
           // to finish a sentence, short enough to avoid recognizer drift.
+          // Devices that ignore this are covered by the controller's own
+          // silence debounce (see _resetSilenceTimer).
           pauseFor: const Duration(seconds: 3),
           cancelOnError: false,
           partialResults: true,
@@ -226,9 +263,17 @@ class VoiceController {
     if (_disposed) return;
     final double normalized = ((levelDb + 2.0) / 12.0).clamp(0.0, 1.0);
     onLevelChanged?.call(normalized);
+
+    // Real voice above the noise floor counts as speech activity and
+    // keeps the silence debounce from cutting the user off mid-sentence
+    // even when the recognizer hasn't produced a partial yet.
+    if (normalized > _speechLevelThreshold && _listenInProgress) {
+      _resetSilenceTimer();
+    }
   }
 
   Future<void> stopListening() async {
+    _cancelSilenceTimer();
     _handsFreeSession = false;
     _listenInProgress = false;
     try {
@@ -238,19 +283,61 @@ class VoiceController {
     _setState(VoiceState.idle);
   }
 
+  // =========================================================================
+  // SILENCE DEBOUNCE (auto-finalize)
+  // =========================================================================
+
+  /// Restarts the silence countdown. Any partial transcript or audible
+  /// input calls this; when the timer finally fires, the utterance is
+  /// treated as complete and submitted automatically.
+  void _resetSilenceTimer() {
+    if (_disposed || _finalizing) return;
+    _silenceTimer?.cancel();
+    _silenceTimer = Timer(silenceTimeout, _onSilenceElapsed);
+  }
+
+  void _cancelSilenceTimer() {
+    _silenceTimer?.cancel();
+    _silenceTimer = null;
+  }
+
+  Future<void> _onSilenceElapsed() async {
+    _silenceTimer = null;
+    if (_disposed || _finalizing) return;
+    if (!_listenInProgress) return;
+    final String transcript = _latestTranscript.trim();
+    if (transcript.isEmpty) return;
+
+    // The recognizer ignored its own pauseFor window (device-dependent)
+    // or is still streaming partials - finalize manually through the
+    // exact same path a native finalResult would take, so the UI and
+    // the hands-free loop behave identically.
+    _finalizing = true;
+    _listenInProgress = false;
+    try {
+      await _speech.stop();
+    } catch (_) {}
+    _setState(VoiceState.processing);
+    onFinalTranscript?.call(transcript);
+  }
+
   void _handleSttResult(SpeechRecognitionResult result) {
-    if (_disposed) return;
+    if (_disposed || _finalizing) return;
     final String text = result.recognizedWords.trim();
     final bool isFinal = result.finalResult;
 
     if (text.isNotEmpty) {
       _consecutiveNoResults = 0;
       if (isFinal) {
+        // Native final result wins; the debounce must not double-submit.
+        _cancelSilenceTimer();
         _listenInProgress = false;
         _setState(VoiceState.processing);
         onFinalTranscript?.call(text);
       } else {
+        _latestTranscript = text;
         onPartialTranscript?.call(text);
+        _resetSilenceTimer();
       }
     }
   }
@@ -264,8 +351,11 @@ class VoiceController {
     }
 
     if (status == 'done' || status == 'notListening') {
-      // A final result sets _listenInProgress=false BEFORE the status
-      // arrives, so "still in progress" means no speech was captured.
+      _cancelSilenceTimer();
+
+      // A final result (or the debounce) sets _listenInProgress=false
+      // BEFORE the status arrives, so "still in progress" means no speech
+      // was captured.
       final bool hadResult = !_listenInProgress;
       _listenInProgress = false;
       onLevelChanged?.call(0.0);
@@ -294,6 +384,8 @@ class VoiceController {
     await Future<void>.delayed(const Duration(milliseconds: 350));
     if (_disposed || !_handsFreeSession || _listenInProgress) return;
     if (_state != VoiceState.listening) return;
+    _latestTranscript = '';
+    _finalizing = false;
     try {
       await _speech.listen(
         onResult: _handleSttResult,
@@ -320,6 +412,7 @@ class VoiceController {
     if (errorText.contains('error_no_match') ||
         errorText.contains('error_speech_timeout')) {
       // Expected, not a fault: nothing intelligible was captured.
+      _cancelSilenceTimer();
       _listenInProgress = false;
       if (_handsFreeSession &&
           _consecutiveNoResults < _maxConsecutiveNoResults) {
@@ -335,6 +428,7 @@ class VoiceController {
     if (errorText.contains('permission') ||
         errorText.contains('denied') ||
         errorText.contains('not_allowed')) {
+      _cancelSilenceTimer();
       _handsFreeSession = false;
       _listenInProgress = false;
       _notifyError(
@@ -346,6 +440,7 @@ class VoiceController {
 
     if (errorText.contains('network') ||
         errorText.contains('network_error')) {
+      _cancelSilenceTimer();
       // Android recognition is a Google network service; no connection
       // is a real, reportable failure mode.
       _handsFreeSession = false;
@@ -357,6 +452,7 @@ class VoiceController {
       return;
     }
 
+    _cancelSilenceTimer();
     _listenInProgress = false;
     _handsFreeSession = false;
     _notifyError('Voice recognition hit an unexpected error. Tap to retry.');
@@ -430,6 +526,7 @@ class VoiceController {
 
   Future<void> dispose() async {
     _disposed = true;
+    _cancelSilenceTimer();
     _handsFreeSession = false;
     try {
       await _speech.stop();
