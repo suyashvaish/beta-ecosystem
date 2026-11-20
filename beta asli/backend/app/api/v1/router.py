@@ -12,6 +12,7 @@ from app.api.v1 import (
     elderly_care_routes,
     emergency_routes,
     family_talk_routes,
+    family_voice_routes,
     memory_routes,
     notification_routes,
     speech_routes,
@@ -25,6 +26,7 @@ api_router.include_router(chat_routes.router)
 api_router.include_router(ai_routes.router)
 api_router.include_router(care_circle_routes.router)
 api_router.include_router(family_talk_routes.router)
+api_router.include_router(family_voice_routes.router)
 api_router.include_router(connect_routes.router)
 api_router.include_router(emergency_routes.router)
 api_router.include_router(device_routes.router)

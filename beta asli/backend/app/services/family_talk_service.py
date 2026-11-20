@@ -19,9 +19,10 @@ Push routing now resolves tokens from the DeviceToken registry
 (single source of truth) for the elder, plus Caregiver rows for
 members - always server-side, never client-supplied.
 
-Audio: only metadata is stored here. The audio bytes go to storage via
-the speech/upload routes (existing pattern); audio_url must be an
-authenticated https storage URL. This service never accepts raw audio.
+Audio: only metadata is stored here. The audio bytes go to the media
+service via the family voice-note routes (upload -> family-media://
+URL -> playback endpoint, re-authorized per request). This service
+never accepts raw audio.
 """
 
 import uuid
@@ -46,6 +47,11 @@ logger = get_logger(__name__)
 
 MAX_TEXT_LENGTH = 4000
 MAX_VOICE_DURATION_SECONDS = 120
+
+# Accepted audio URL schemes. https:// covers external storage in
+# production deployments; family-media:// is the backend's own
+# authorized voice-note storage (see family_media_service.py).
+_ALLOWED_AUDIO_SCHEMES = ("https://", "family-media://")
 
 
 class FamilyTalkService:
@@ -115,7 +121,7 @@ class FamilyTalkService:
         recipient_user_id: Optional[uuid.UUID] = None,
     ) -> FamilyTalkMessage:
         await self._authorize(sender_user.id, elder_user_id)
-        if not audio_url or not str(audio_url).startswith("https://"):
+        if not audio_url or not str(audio_url).startswith(_ALLOWED_AUDIO_SCHEMES):
             raise ValidationError("A secure audio URL is required.")
         duration = int(duration_seconds)
         if duration <= 0 or duration > MAX_VOICE_DURATION_SECONDS:

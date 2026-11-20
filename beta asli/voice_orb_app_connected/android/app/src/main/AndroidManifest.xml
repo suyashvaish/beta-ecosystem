@@ -6,10 +6,16 @@
     <!-- Internet permission for the FastAPI backend -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- DEV ONLY: allows plain http:// to the backend running on the
+         LAN (e.g. http://10.95.6.20:8000). Android 9+ blocks cleartext
+         by default, which the phone reports as "could not reach
+         server". Remove/replace with a network security config limited
+         to the dev host before any release build. -->
     <application
         android:label="Beta"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"

@@ -10,6 +10,7 @@ import '../theme/beta_theme.dart';
 import '../widgets/audio_waveform.dart';
 import '../widgets/beta_buttons.dart';
 import '../widgets/chat_message_bubble.dart';
+import 'family_talk_screen.dart';
 import 'settings_screen.dart';
 
 /// The redesigned Beta home experience.
@@ -55,7 +56,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
   final List<ChatMessage> _messages = <ChatMessage>[];
 
   String? _lastUserMessage;
-  String? _errorMessage;
   bool _messageBeingSent = false;
 
   late final VoiceController _voice;
@@ -77,7 +77,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
 
     _voice = VoiceController(
       onStateChanged: _onVoiceStateChanged,
-      onLevelChanged: _audioLevel.value = _,
+      onLevelChanged: (level) => _audioLevel.value = level,
       onPartialTranscript: _onPartialTranscript,
       onFinalTranscript: _onFinalTranscript,
       onError: _onVoiceError,
@@ -148,7 +148,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
     if (!mounted) return;
 
     setState(() {
-      _errorMessage = message;
       if (_messages.isNotEmpty &&
           _messages.last.role == ChatRole.assistant &&
           _messages.last.status == ChatMessageStatus.streaming) {
@@ -169,8 +168,13 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
     if (message.isEmpty) return;
     if (_messageBeingSent) return;
 
-    if (_state == _AssistantState.thinking ||
-        _state == _AssistantState.speaking) {
+    // A voice-finalized send is initiated by the controller (mic closed,
+    // no request in flight), and the controller reports state=processing
+    // BEFORE invoking onFinalTranscript - so the busy guard would reject
+    // the very send it triggers. Only typed input is blocked while busy.
+    if (!viaVoice &&
+        (_state == _AssistantState.thinking ||
+            _state == _AssistantState.speaking)) {
       return;
     }
 
@@ -188,7 +192,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
       if (!mounted) return;
 
       _lastUserMessage = message;
-      _errorMessage = null;
 
       if (!viaVoice) _inputController.clear();
 
@@ -261,7 +264,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
             case ChatStreamError():
               setState(() {
                 _state = _AssistantState.error;
-                _errorMessage = event.detail;
                 _messages.last
                   ..text = event.detail
                   ..status = ChatMessageStatus.error;
@@ -273,7 +275,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
 
           setState(() {
             _state = _AssistantState.error;
-            _errorMessage = 'Unable to contact Beta.';
             _messages.last
               ..text = 'Unable to contact Beta.'
               ..status = ChatMessageStatus.error;
@@ -289,7 +290,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
 
       setState(() {
         _state = _AssistantState.error;
-        _errorMessage = 'Unable to contact Beta.';
         _messages.last
           ..text = 'Unable to contact Beta.'
           ..status = ChatMessageStatus.error;
@@ -364,7 +364,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
         if (!mounted) return;
         setState(() => _state = _AssistantState.idle);
       case _AssistantState.error:
-        _errorMessage = null;
         if (mounted) setState(() => _state = _AssistantState.idle);
         await _voice.startListening(handsFree: true);
     }
@@ -386,7 +385,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
     _messages.clear();
     _lastUserMessage = null;
     _conversationId = null;
-    _errorMessage = null;
     _inputController.clear();
 
     if (!mounted) return;
@@ -526,6 +524,20 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
                 ),
               ),
               const SizedBox(height: 18),
+              _menuAction(
+                icon: Icons.family_restroom_rounded,
+                label: 'Family Talk',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => FamilyTalkScreen(
+                        authService: widget.authService,
+                      ),
+                    ),
+                  );
+                },
+              ),
               _menuAction(
                 icon: Icons.chat_bubble_outline_rounded,
                 label: 'Clear conversation',

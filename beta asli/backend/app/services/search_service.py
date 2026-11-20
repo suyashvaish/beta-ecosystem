@@ -7,8 +7,11 @@ AI tool layer (or the Flutter apps) can render directly:
   - MapsSearchService: nearby places / place details via Google Maps
     Platform (Places API). Falls back honestly when the key is missing
     or the API fails - Beta never invents results.
-  - WebSearchService: general web search via SerpApi's JSON API
-    (ToS-compliant; no scraping of Google result pages).
+  - WebSearchService: general web search through a provider chain:
+    Tavily (free tier, LLM-oriented clean results) -> SerpApi (paid JSON
+    API, ToS-compliant) -> DuckDuckGo (keyless library fallback).
+    The first provider that is configured and responds wins; a provider
+    failure falls through to the next instead of failing the whole tool.
   - ProductSearchService: product discovery through Google Maps
     "shopping-ish" local retailer search where available; the tool
     returns merchant, address, and rating information rather than
@@ -35,6 +38,7 @@ _MAPS_NEARBY_BASE = "https://maps.googleapis.com/maps/api/place/nearbysearch/jso
 _MAPS_TEXT_BASE = "https://maps.googleapis.com/maps/api/place/textsearch/json"
 _MAPS_DETAILS_BASE = "https://maps.googleapis.com/maps/api/place/details/json"
 _SERPAPI_BASE = "https://serpapi.com/search.json"
+_TAVILY_BASE = "https://api.tavily.com/search"
 
 
 class SearchUnavailable(AIServiceError):
@@ -155,14 +159,63 @@ class MapsSearchService:
 
 
 class WebSearchService:
-    """General web search via SerpApi (ToS-compliant JSON API)."""
+    """
+    General web search through a provider chain.
 
-    def _check_configured(self) -> None:
+    Order (configurable via WEB_SEARCH_PROVIDERS):
+      1. Tavily - free tier (1,000 searches/month), returns clean
+         LLM-ready text, best default for an AI assistant.
+      2. SerpApi - existing paid JSON provider, kept for deployments
+         that already have a key.
+      3. DuckDuckGo - keyless library fallback, no credentials needed.
+
+    A provider that is not configured (missing key) is skipped; a
+    provider that errors is logged and the chain falls through to the
+    next. Only when every provider fails does the tool raise
+    SearchUnavailable - Beta then says so honestly instead of inventing
+    results.
+    """
+
+    def _provider_chain(self) -> List[str]:
+        chain = [
+            p.strip().lower()
+            for p in settings.WEB_SEARCH_PROVIDERS.split(",")
+            if p.strip()
+        ]
+        return chain or ["duckduckgo"]
+
+    async def _search_tavily(self, query: str, limit: int) -> List[Dict[str, Any]]:
+        if not settings.TAVILY_API_KEY:
+            raise SearchUnavailable("tavily not configured")
+        payload = {
+            "api_key": settings.TAVILY_API_KEY,
+            "query": query,
+            "max_results": min(limit, 10),
+            "include_answer": False,
+        }
+        try:
+            async with httpx.AsyncClient(
+                timeout=settings.WEB_SEARCH_TIMEOUT_SECONDS
+            ) as client:
+                resp = await client.post(_TAVILY_BASE, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise SearchUnavailable("tavily error") from exc
+        results = []
+        for item in data.get("results", [])[:limit]:
+            results.append({
+                "title": item.get("title"),
+                "link": item.get("url"),
+                "snippet": item.get("content"),
+            })
+        if not results:
+            raise SearchUnavailable("tavily returned no results")
+        return results
+
+    async def _search_serpapi(self, query: str, limit: int) -> List[Dict[str, Any]]:
         if not settings.SERPAPI_KEY:
-            raise SearchUnavailable("Web search is not configured on this server yet.")
-
-    async def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
-        self._check_configured()
+            raise SearchUnavailable("serpapi not configured")
         params = {"api_key": settings.SERPAPI_KEY, "q": query, "num": max(limit, 10)}
         try:
             async with httpx.AsyncClient(
@@ -171,12 +224,8 @@ class WebSearchService:
                 resp = await client.get(_SERPAPI_BASE, params=params)
                 resp.raise_for_status()
                 data = resp.json()
-        except httpx.HTTPError as exc:
-            logger.warning(
-                "Web search failed",
-                extra={"extra_fields": {"error": str(exc)}},
-            )
-            raise SearchUnavailable("Web search is not responding right now.") from exc
+        except (httpx.HTTPError, ValueError) as exc:
+            raise SearchUnavailable("serpapi error") from exc
         results = []
         for item in data.get("organic_results", [])[:limit]:
             results.append({
@@ -184,7 +233,60 @@ class WebSearchService:
                 "link": item.get("link"),
                 "snippet": item.get("snippet"),
             })
+        if not results:
+            raise SearchUnavailable("serpapi returned no results")
         return results
+
+    async def _search_duckduckgo(self, query: str, limit: int) -> List[Dict[str, Any]]:
+        # Keyless fallback. duckduckgo-search is a synchronous library,
+        # so it runs in a worker thread to keep the event loop free.
+        def _ddg() -> List[Dict[str, Any]]:
+            from duckduckgo_search import DDGS
+
+            with DDGS() as ddgs:
+                raw = ddgs.text(query, max_results=limit)
+                return [
+                    {
+                        "title": r.get("title"),
+                        "link": r.get("href"),
+                        "snippet": r.get("body"),
+                    }
+                    for r in raw
+                ]
+
+        try:
+            results = await asyncio.to_thread(_ddg)
+        except Exception as exc:  # noqa: BLE001
+            raise SearchUnavailable("duckduckgo error") from exc
+        if not results:
+            raise SearchUnavailable("duckduckgo returned no results")
+        return results
+
+    async def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        failures: List[str] = []
+
+        for provider in self._provider_chain():
+            try:
+                if provider == "tavily":
+                    return await self._search_tavily(query, limit)
+                if provider == "serpapi":
+                    return await self._search_serpapi(query, limit)
+                if provider == "duckduckgo":
+                    return await self._search_duckduckgo(query, limit)
+                logger.warning(
+                    "Unknown web search provider in chain",
+                    extra={"extra_fields": {"provider": provider}},
+                )
+            except SearchUnavailable as exc:
+                failures.append(f"{provider}: {exc}")
+                logger.info(
+                    "Web search provider failed; trying next",
+                    extra={"extra_fields": {"provider": provider, "error": str(exc)}},
+                )
+
+        raise SearchUnavailable(
+            "Web search is not responding right now. Please try again."
+        )
 
 
 class ProductSearchService:

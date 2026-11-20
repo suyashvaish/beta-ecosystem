@@ -37,12 +37,12 @@ class GradientMicButton extends StatelessWidget {
           shape: BoxShape.circle,
           gradient:
               active ? null : BetaColors.micGradient,
-          color: active ? glow.withOpacity(0.16) : null,
+          color: active ? glow.withValues(alpha: 0.16) : null,
           border: active ? Border.all(color: glow, width: 1.4) : null,
           boxShadow: [
             BoxShadow(
               color: (active ? glow : BetaColors.purple)
-                  .withOpacity(active ? 0.35 : 0.45),
+                  .withValues(alpha: active ? 0.35 : 0.45),
               blurRadius: 34,
               spreadRadius: 2,
             ),
