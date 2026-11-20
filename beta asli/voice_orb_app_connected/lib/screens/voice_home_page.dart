@@ -167,8 +167,13 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
     if (message.isEmpty) return;
     if (_messageBeingSent) return;
 
-    if (_state == _AssistantState.thinking ||
-        _state == _AssistantState.speaking) {
+    // A voice-finalized send is initiated by the controller (mic closed,
+    // no request in flight), and the controller reports state=processing
+    // BEFORE invoking onFinalTranscript - so the busy guard would reject
+    // the very send it triggers. Only typed input is blocked while busy.
+    if (!viaVoice &&
+        (_state == _AssistantState.thinking ||
+            _state == _AssistantState.speaking)) {
       return;
     }
 
