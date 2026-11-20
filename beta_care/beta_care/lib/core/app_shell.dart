@@ -9,11 +9,12 @@ import '../screens/family/add_elderly_screen.dart';
 import '../screens/health/health_screen.dart';
 import '../screens/medications/medications_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/talk/family_talk_screen.dart';
 import '../widgets/common_widgets.dart';
 
-/// Everything after sign-in lives here. Before showing the five monitoring
-/// tabs, this loads the caregiver's family connections and - once there's
-/// an active one - their permissions for it, so every tab can assume both
+/// Everything after sign-in lives here. Before showing the tabs, this
+/// loads the caregiver's family connections and - once there's an
+/// active one - their permissions for it, so every tab can assume both
 /// are already available by the time it mounts (see the tab screens'
 /// `_load()` methods, which just read [FamilyProvider.primaryElderlyUserId]
 /// directly rather than re-checking for null every time).
@@ -29,6 +30,7 @@ class _AppShellState extends State<AppShell> {
 
   static const _tabs = [
     DashboardScreen(),
+    FamilyTalkScreen(),
     MedicationsScreen(),
     HealthScreen(),
     AlertsScreen(),
@@ -103,6 +105,7 @@ class _AppShellState extends State<AppShell> {
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.mic_none_rounded), selectedIcon: Icon(Icons.mic_rounded), label: 'Talk'),
           NavigationDestination(icon: Icon(Icons.medication_outlined), selectedIcon: Icon(Icons.medication_rounded), label: 'Meds'),
           NavigationDestination(icon: Icon(Icons.favorite_outline_rounded), selectedIcon: Icon(Icons.favorite_rounded), label: 'Health'),
           NavigationDestination(icon: Icon(Icons.notifications_outlined), selectedIcon: Icon(Icons.notifications_rounded), label: 'Alerts'),

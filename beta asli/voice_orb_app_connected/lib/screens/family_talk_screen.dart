@@ -344,6 +344,11 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
         ),
         decoration: BoxDecoration(
           color: mine ? BetaColors.purple : BetaColors.backgroundSecondary,
+          // BetaColors.accent does not exist in the palette; the accent
+          // is `purple`. My bubbles use the purple->pink pill gradient
+          // to match the mic button's visual language.
+          gradient: mine ? BetaColors.pillGradient : null,
+          color: mine ? null : BetaColors.backgroundSecondary,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -361,18 +366,26 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
                 style: BetaText.status.copyWith(fontSize: 11),
               ),
             if (isVoice)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _playingId == m.id
-                        ? Icons.stop_rounded
-                        : Icons.play_arrow_rounded,
-                    color: mine ? Colors.black : BetaColors.textPrimary,
+              // Tap the bubble to play / stop the voice note.
+              InkWell(
+                onTap: () => _playMessage(m),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _playingId == m.id
+                            ? Icons.stop_rounded
+                            : Icons.play_arrow_rounded,
+                        color: mine ? Colors.black : BetaColors.textPrimary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text('${m.durationSeconds ?? 0}s'),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  Text('${m.durationSeconds ?? 0}s'),
-                ],
+                ),
               )
             else
               Text(m.body ?? '', style: BetaText.body),
@@ -428,6 +441,9 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
               height: 54,
               decoration: BoxDecoration(
                 color: recording ? Colors.red : BetaColors.purple,
+                // BetaColors.accent does not exist; use the signature
+                // mic gradient instead.
+                gradient: BetaColors.micGradient,
                 shape: BoxShape.circle,
               ),
               child: Icon(

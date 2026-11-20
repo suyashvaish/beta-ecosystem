@@ -2,7 +2,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../theme/beta_background.dart';
+import '../theme/beta_theme.dart';
 
+/// Redesigned login screen (same AuthService flow, new palette):
+/// Beta's dark navy backdrop with glows, gradient primary button,
+/// card-surface input fields.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.authService});
 
@@ -57,80 +62,110 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.blur_circular, color: Colors.white70, size: 56),
-                const SizedBox(height: 16),
-                Text(
-                  _isSignUp ? 'Create your account' : 'Welcome back',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w600,
+      backgroundColor: BetaColors.background,
+      body: BetaBackground(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: BetaColors.micGradient,
+                    ),
+                    child: const Icon(
+                      Icons.blur_circular,
+                      color: BetaColors.textPrimary,
+                      size: 36,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 32),
-                _field(
-                  controller: _emailController,
-                  hint: 'Email',
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                const SizedBox(height: 12),
-                _field(
-                  controller: _passwordController,
-                  hint: 'Password',
-                  obscure: true,
-                ),
-                if (_error != null) ...[
                   const SizedBox(height: 16),
                   Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                    _isSignUp ? 'Create your account' : 'Welcome back',
                     textAlign: TextAlign.center,
+                    style: BetaText.greeting,
                   ),
-                ],
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
+                  const SizedBox(height: 32),
+                  _field(
+                    controller: _emailController,
+                    hint: 'Email',
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 12),
+                  _field(
+                    controller: _passwordController,
+                    hint: 'Password',
+                    obscure: true,
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      _error!,
+                      style: const TextStyle(
+                        color: BetaColors.error,
+                        fontSize: 13,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 52,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: BetaColors.micGradient,
                         borderRadius: BorderRadius.circular(26),
+                        boxShadow: [
+                          BoxShadow(
+                            color: BetaColors.purple.withValues(alpha: 0.35),
+                            blurRadius: 24,
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: BetaColors.textPrimary,
+                          shadowColor: Colors.transparent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(26),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: BetaColors.textPrimary,
+                                ),
+                              )
+                            : Text(_isSignUp ? 'Sign up' : 'Sign in'),
                       ),
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2.5),
-                          )
-                        : Text(_isSignUp ? 'Sign up' : 'Sign in'),
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () => setState(() => _isSignUp = !_isSignUp),
-                  child: Text(
-                    _isSignUp
-                        ? 'Already have an account? Sign in'
-                        : "Don't have an account? Sign up",
-                    style: const TextStyle(color: Colors.white70),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () => setState(() => _isSignUp = !_isSignUp),
+                    child: Text(
+                      _isSignUp
+                          ? 'Already have an account? Sign in'
+                          : "Don't have an account? Sign up",
+                      style: const TextStyle(color: BetaColors.textSecondary),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -148,12 +183,20 @@ class _LoginScreenState extends State<LoginScreen> {
       controller: controller,
       obscureText: obscure,
       keyboardType: keyboardType,
-      style: const TextStyle(color: Colors.white),
+      style: BetaText.body,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white38),
+        hintStyle: const TextStyle(color: BetaColors.textSecondary),
         filled: true,
-        fillColor: const Color(0xFF2A2A2A),
+        fillColor: BetaColors.backgroundSecondary,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: BetaColors.cardBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: BetaColors.purple),
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,

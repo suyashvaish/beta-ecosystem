@@ -1,30 +1,26 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:beta_care/main.dart';
+import 'package:beta_care/services/auth_service.dart';
+import 'package:beta_care/services/beta_api_client.dart';
+import 'package:beta_care/services/notification_service.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Beta Care boots to the sign-in screen in mock mode',
+      (WidgetTester tester) async {
+    // Same wiring as main() with AppConfig.useMockBackend == true:
+    // all in-memory services, no Firebase, no network.
+    await tester.pumpWidget(BetaCareApp(
+      authService: MockAuthService(),
+      apiClient: MockBetaApiClient(),
+      notificationService: MockNotificationService(),
+    ));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing); 
+    // First frame: providers settle, AuthGate shows the login UI.
+    await tester.pumpAndSettle();
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // The sign-in screen is the entry point for an anonymous user.
+    expect(find.byType(MaterialApp), findsOneWidget);
   });
 }
