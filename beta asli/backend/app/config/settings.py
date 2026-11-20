@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     @classmethod
     def split_phrases(cls, v):
         if isinstance(v, str):
-            return [p.strip() for origin in v.split(",") if p.strip()]
+            return [p.strip() for p in v.split(",") if p.strip()]
         return v
 
     @model_validator(mode="after")
