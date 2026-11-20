@@ -1,0 +1,33 @@
+name: beta_care_app
+description: Beta Care - the family side of the Beta ecosystem. Talk to your elder via walkie-talkie voice notes and text.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.6
+
+  # --- Auth / backend -------------------------------------------------
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  http: ^1.2.2
+
+  # --- Family Talk (walkie-talkie) -------------------------------------
+  permission_handler: ^11.3.0
+  # record ^7 is required: 5.2.1 pins a broken record_linux (missing
+  # startStream) and the maintainer supports v6+ only.
+  record: ^7.2.0
+  just_audio: ^0.9.43
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
