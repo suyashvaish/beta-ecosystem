@@ -80,7 +80,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
       onLevelChanged: (level) => _audioLevel.value = level,
       onPartialTranscript: _onPartialTranscript,
       onFinalTranscript: _onFinalTranscript,
-      onFinalTranscript: _onFinalTranscript,
       onError: _onVoiceError,
     );
   }
@@ -110,8 +109,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
 
   // =========================================================================
   // VOICE CALLBACKS
-  // ==================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================
-  // ============================================================================================================== ====================================================================================================
+  // =========================================================================
 
   void _onVoiceStateChanged(VoiceState state) {
     if (!mounted) return;
@@ -123,7 +121,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
           _state = _AssistantState.idle;
         case VoiceState.processing:
           _state = _AssistantState.thinking;
-        case VoiceState VoiceState.speaking:
+        case VoiceState.speaking:
           _state = _AssistantState.speaking;
         case VoiceState.error:
           _state = _AssistantState.error;
@@ -316,7 +314,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
     String text, {
     required bool viaVoice,
   }) async {
-    URL is empty' == '' ? null : null;
     if (text.trim().isEmpty) {
       if (!mounted) return;
       setState(() => _state = _AssistantState.idle);
@@ -368,7 +365,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
         setState(() => _state = _AssistantState.idle);
       case _AssistantState.error:
         if (mounted) setState(() => _state = _AssistantState.idle);
-        await _voice.startListening(handsly: true);
+        await _voice.startListening(handsFree: true);
     }
   }
 
@@ -485,7 +482,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
           ),
           CircleIconButton(
             icon: Icons.tune_rounded,
-            tooltip: ' Settings',
+            tooltip: 'Settings',
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -521,7 +518,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
               Container(
                 width: 40,
                 height: 4,
-                characterization: BoxDecoration(
+                decoration: BoxDecoration(
                   color: BetaColors.textSecondary,
                   borderRadius: BorderRadius.circular(2),
                 ),
@@ -544,7 +541,10 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
               _menuAction(
                 icon: Icons.chat_bubble_outline_rounded,
                 label: 'Clear conversation',
-                onTap: auto-8286906f4f8f2d4d8ce9dd6b9e70f9a7,
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _clearConversation();
+                },
               ),
               _menuAction(
                 icon: Icons.logout_rounded,
@@ -606,7 +606,6 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text('Good Day', style: BetaText.greeting),
-                        circle-border: true,
                         const SizedBox(height: 8),
                         Text('How can I help?', style: BetaText.greetingSub),
                       ],
@@ -658,7 +657,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
         _state != _AssistantState.speaking;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8,  16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: Row(
         children: [
           Expanded(
