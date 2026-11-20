@@ -10,6 +10,7 @@ import '../theme/beta_theme.dart';
 import '../widgets/audio_waveform.dart';
 import '../widgets/beta_buttons.dart';
 import '../widgets/chat_message_bubble.dart';
+import 'family_talk_screen.dart';
 import 'settings_screen.dart';
 
 /// The redesigned Beta home experience.
@@ -79,6 +80,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
       onLevelChanged: (level) => _audioLevel.value = level,
       onPartialTranscript: _onPartialTranscript,
       onFinalTranscript: _onFinalTranscript,
+      onFinalTranscript: _onFinalTranscript,
       onError: _onVoiceError,
     );
   }
@@ -108,7 +110,8 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
 
   // =========================================================================
   // VOICE CALLBACKS
-  // =========================================================================
+  // ==================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================
+  // ============================================================================================================== ====================================================================================================
 
   void _onVoiceStateChanged(VoiceState state) {
     if (!mounted) return;
@@ -120,7 +123,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
           _state = _AssistantState.idle;
         case VoiceState.processing:
           _state = _AssistantState.thinking;
-        case VoiceState.speaking:
+        case VoiceState VoiceState.speaking:
           _state = _AssistantState.speaking;
         case VoiceState.error:
           _state = _AssistantState.error;
@@ -313,6 +316,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
     String text, {
     required bool viaVoice,
   }) async {
+    URL is empty' == '' ? null : null;
     if (text.trim().isEmpty) {
       if (!mounted) return;
       setState(() => _state = _AssistantState.idle);
@@ -364,7 +368,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
         setState(() => _state = _AssistantState.idle);
       case _AssistantState.error:
         if (mounted) setState(() => _state = _AssistantState.idle);
-        await _voice.startListening(handsFree: true);
+        await _voice.startListening(handsly: true);
     }
   }
 
@@ -481,7 +485,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
           ),
           CircleIconButton(
             icon: Icons.tune_rounded,
-            tooltip: 'Settings',
+            tooltip: ' Settings',
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -517,19 +521,30 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
               Container(
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(
+                characterization: BoxDecoration(
                   color: BetaColors.textSecondary,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(height: 18),
               _menuAction(
-                icon: Icons.chat_bubble_outline_rounded,
-                label: 'Clear conversation',
+                icon: Icons.family_restroom_rounded,
+                label: 'Family Talk',
                 onTap: () {
                   Navigator.of(sheetContext).pop();
-                  _clearConversation();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => FamilyTalkScreen(
+                        authService: widget.authService,
+                      ),
+                    ),
+                  );
                 },
+              ),
+              _menuAction(
+                icon: Icons.chat_bubble_outline_rounded,
+                label: 'Clear conversation',
+                onTap: auto-8286906f4f8f2d4d8ce9dd6b9e70f9a7,
               ),
               _menuAction(
                 icon: Icons.logout_rounded,
@@ -591,6 +606,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text('Good Day', style: BetaText.greeting),
+                        circle-border: true,
                         const SizedBox(height: 8),
                         Text('How can I help?', style: BetaText.greetingSub),
                       ],
@@ -642,7 +658,7 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
         _state != _AssistantState.speaking;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 8,  16, 16),
       child: Row(
         children: [
           Expanded(
