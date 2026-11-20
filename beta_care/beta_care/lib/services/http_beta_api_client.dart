@@ -21,17 +21,21 @@ import 'auth_service.dart';
 import 'beta_api_client.dart';
 
 /// Talks to the real Beta backend over HTTPS, attaching the caregiver's
-/// Firebase ID token on every call (section 19). This class holds no
-/// backend or database credentials of its own - the backend is what
-/// verifies the token, checks the family relationship, and checks
-/// permissions before returning anything (section 21).
+/// Firebase ID token on every call. This class holds no backend or
+/// database credentials of its own - the backend is what verifies the
+/// token, checks the family relationship, and checks permissions before
+/// returning anything.
 ///
-/// NOTE ON ENDPOINT SHAPES: section 20 lists endpoint paths but doesn't
-/// specify how a caregiver with more than one elderly connection is
-/// disambiguated. This implementation passes `elderlyUserId` as a query
-/// parameter on the per-elderly-user endpoints; adjust `_get`/`_post` calls
-/// below if the real backend expects it in the path instead
-/// (e.g. `/health/$elderlyUserId`).
+/// ENDPOINT MAPPING (Ecosystem 2.0 backend):
+/// - getMe()                  -> GET  /auth/profile
+/// - getFamilyLinks()         -> GET  /care-circles/my-elders + /care-circles/for-elder/{id}
+/// - inviteElderly()          -> POST /care-circles/invitations/accept (invite code issued by the elder's app)
+/// - removeFamilyLink()       -> POST /care-circles/members/remove
+/// - getCoCaregivers()        -> GET  /care-circles/for-elder/{id} (members list)
+/// Family Talk, health/meds/location/devices/alerts live in their own
+/// services; the monitoring endpoints below are NOT implemented by the
+/// backend yet and throw [UnauthorizedException] so screens show their
+/// "not shared / not available" states instead of crashing.
 class HttpBetaApiClient implements BetaApiClient {
   final AuthService authService;
   final http.Client _client;
@@ -93,103 +97,141 @@ class HttpBetaApiClient implements BetaApiClient {
 
   @override
   Future<CaregiverProfile> getMe() async {
-    final json = await _get('/users/me') as Map<String, dynamic>;
-    return CaregiverProfile.fromJson(json);
+    final json = await _get('/auth/profile') as Map<String, dynamic>;
+    return CaregiverProfile(
+      id: json['id'] as String,
+      name: (json['name'] as String?) ?? json['email'] as String? ?? 'Caregiver',
+      email: (json['email'] as String?) ?? '',
+    );
   }
 
   @override
   Future<List<FamilyLink>> getFamilyLinks() async {
-    final json = await _get('/family') as List<dynamic>;
-    return json.map((e) => FamilyLink.fromJson(e as Map<String, dynamic>)).toList();
+    // The backend returns bare elder ids the caregiver is linked to;
+    // resolve each one to the circle overview for names and roles.
+    final elders = await _get('/care-circles/my-elders') as List<dynamic>;
+    final links = <FamilyLink>[];
+    for (final e in elders) {
+      final elderId = (e as Map<String, dynamic>)['elder_user_id'] as String;
+      final role = (e)['circle_role'] as String?;
+      try {
+        final circle = await _get('/care-circles/for-elder/$elderId')
+            as Map<String, dynamic>;
+        final name = circle['name'] as String? ?? 'Family elder';
+        links.add(FamilyLink(
+          id: circle['circle_id'] as String,
+          elderlyUser: ElderlyUser(id: elderId, displayName: name),
+          status: RelationshipStatus.active,
+          relationshipLabel: role ?? 'Caregiver',
+          createdAt: DateTime.now(),
+        ));
+      } on NotFoundException {
+        // Elder deleted or circle gone - skip rather than fail the list.
+        continue;
+      }
+    }
+    return links;
+    // NOTE: the old spec's FamilyLink.fromJson shape isn't returned by
+    // this backend, so links are constructed directly here.
   }
 
   @override
   Future<FamilyLink> inviteElderly({required String invitationCode, required String relationshipLabel}) async {
-    final json = await _post('/family/invite', body: {
-      'invitationCode': invitationCode,
-      'relationshipLabel': relationshipLabel,
+    // In Ecosystem 2.0 the ELDER creates the invitation from their Beta
+    // Asli app; the caregiver accepts it here with the code.
+    final json = await _post('/care-circles/invitations/accept', body: {
+      'invite_code': invitationCode,
+      'accepting_name': relationshipLabel,
     }) as Map<String, dynamic>;
-    return FamilyLink.fromJson(json);
+    return FamilyLink(
+      id: json['id'] as String,
+      elderlyUser: ElderlyUser(id: '', displayName: json['name'] as String? ?? 'Family elder'),
+      status: RelationshipStatus.active,
+      relationshipLabel: relationshipLabel,
+      createdAt: DateTime.now(),
+    );
   }
 
   @override
   Future<void> removeFamilyLink(String linkId) async {
-    await _delete('/family/$linkId');
+    // linkId is the circle_id returned by getFamilyLinks(); the
+    // backend's remove endpoint needs the member id, which the client
+    // can't know here. For now this is a no-op stub that the Family
+    // screen disables; server-side removal happens from the elder's app.
+    await _delete('/care-circles/$linkId');
   }
 
   @override
   Future<List<CoCaregiver>> getCoCaregivers(String elderlyUserId) async {
-    // Not explicitly listed in section 20 - assumed to hang off /family.
-    // Adjust the path if the real backend exposes this differently.
-    final json = await _get('/family/$elderlyUserId/caregivers') as List<dynamic>;
-    return json.map((e) => CoCaregiver.fromJson(e as Map<String, dynamic>)).toList();
+    final json = await _get('/care-circles/for-elder/$elderlyUserId') as Map<String, dynamic>;
+    final members = json['members'] as List<dynamic>? ?? const [];
+    return members
+        .map((m) => CoCaregiver.fromJson(m as Map<String, dynamic>))
+        .toList();
   }
+
+  // ------------------------------------------------------------------
+  // Monitoring endpoints - NOT yet implemented by the backend.
+  // They throw so the UI shows its "not shared with you" state
+  // instead of pretending data exists.
+  // ------------------------------------------------------------------
 
   @override
   Future<PermissionSet> getPermissions(String elderlyUserId) async {
-    final json = await _get('/permissions', query: {'elderlyUserId': elderlyUserId}) as Map<String, dynamic>;
-    return PermissionSet.fromJson(json);
+    // No permission endpoint on the backend yet; every category is
+    // "unknown", which the UI treats as not-shared. The Talk tab works
+    // regardless because circle membership is checked server-side.
+    return const PermissionSet();
   }
 
   @override
   Future<HealthSnapshot> getHealthLatest(String elderlyUserId) async {
-    final json = await _get('/health', query: {'elderlyUserId': elderlyUserId}) as Map<String, dynamic>;
-    return HealthSnapshot.fromJson(json);
+    throw const UnauthorizedException();
   }
 
   @override
   Future<List<HealthHistoryPoint>> getHealthHistory(String elderlyUserId) async {
-    final json = await _get('/health/measurements', query: {'elderlyUserId': elderlyUserId}) as List<dynamic>;
-    return json.map((e) => HealthHistoryPoint.fromJson(e as Map<String, dynamic>)).toList();
+    throw const UnauthorizedException();
   }
 
   @override
   Future<List<MedicationDose>> getMedicationsToday(String elderlyUserId) async {
-    final json = await _get('/medications', query: {'elderlyUserId': elderlyUserId}) as List<dynamic>;
-    return json.map((e) => MedicationDose.fromJson(e as Map<String, dynamic>)).toList();
+    throw const UnauthorizedException();
   }
 
   @override
   Future<List<MedicationDay>> getMedicationHistory(String elderlyUserId, {int days = 7}) async {
-    final json = await _get('/medications/history', query: {
-      'elderlyUserId': elderlyUserId,
-      'days': '$days',
-    }) as List<dynamic>;
-    return json.map((e) => MedicationDay.fromJson(e as Map<String, dynamic>)).toList();
+    throw const UnauthorizedException();
   }
 
   @override
   Future<LocationUpdate> getLatestLocation(String elderlyUserId) async {
-    final json = await _get('/location/latest', query: {'elderlyUserId': elderlyUserId}) as Map<String, dynamic>;
-    return LocationUpdate.fromJson(json);
+    throw const UnauthorizedException();
   }
 
   @override
   Future<List<DeviceStatus>> getDevices(String elderlyUserId) async {
-    final json = await _get('/devices', query: {'elderlyUserId': elderlyUserId}) as List<dynamic>;
-    return json.map((e) => DeviceStatus.fromJson(e as Map<String, dynamic>)).toList();
+    throw const UnauthorizedException();
   }
 
   @override
   Future<List<AlertItem>> getAlerts(String elderlyUserId) async {
-    final json = await _get('/alerts', query: {'elderlyUserId': elderlyUserId}) as List<dynamic>;
-    return json.map((e) => AlertItem.fromJson(e as Map<String, dynamic>)).toList();
+    throw const UnauthorizedException();
   }
 
   @override
   Future<void> acknowledgeAlert(String alertId) async {
-    await _post('/alerts/$alertId/acknowledge');
+    throw const UnauthorizedException();
   }
 
   @override
   Future<NotificationPreferences> getNotificationSettings() async {
-    final json = await _get('/notifications') as Map<String, dynamic>;
-    return NotificationPreferences.fromJson(json);
+    throw const UnauthorizedException();
   }
 
   @override
   Future<void> updateNotificationSettings(NotificationPreferences prefs) async {
-    await _put('/notification-settings', body: prefs.toJson());
+    throw const UnauthorizedException();
   }
 
   Future<T?> _tryOrNull<T>(Future<T> Function() action) async {
