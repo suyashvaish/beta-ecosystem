@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
@@ -16,6 +17,10 @@ import '../theme/beta_theme.dart';
 /// send it to the family circle. Text messages work too. Voice notes
 /// from family members play through the backend's authorized playback
 /// endpoint (never a public URL).
+///
+/// For the elderly user this screen also carries the "Invite family"
+/// action: it creates a care-circle invitation code that a family
+/// member can paste into their Beta Care app to join the circle.
 class FamilyTalkScreen extends StatefulWidget {
   const FamilyTalkScreen({super.key, required this.authService});
 
@@ -32,6 +37,7 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
   String? _error;
   String? _elderUserId;
   String? _myUserId;
+  bool _isElderly = false;
   final List<FamilyMessage> _messages = <FamilyMessage>[];
 
   final TextEditingController _inputController = TextEditingController();
@@ -41,6 +47,7 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
   final AudioRecorder _recorder = AudioRecorder();
   DateTime? _recordStart;
   bool _sending = false;
+  bool _inviting = false;
   String? _recordingError;
 
   // Playback
@@ -97,6 +104,7 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
       if (!mounted) return;
       setState(() {
         _myUserId = profile.userId;
+        _isElderly = profile.isElderly;
         _elderUserId = elderId;
         _messages
           ..clear()
@@ -116,6 +124,87 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
         _error = 'Could not load Family Talk: $e';
         _loading = false;
       });
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Invite family (elder side)
+  // ------------------------------------------------------------------
+
+  Future<void> _inviteFamily() async {
+    if (_inviting) return;
+    setState(() => _inviting = true);
+    try {
+      final code = await _api.createInvitation();
+      if (!mounted) return;
+      setState(() => _inviting = false);
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: BetaColors.card,
+          title: Text('Invite code', style: BetaText.status),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Give this code to your family member. They paste it into '
+                'their Beta Care app to join your circle.',
+                style: BetaText.bodySecondary,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: BetaColors.backgroundSecondary,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: BetaColors.cardBorder),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        code,
+                        style: BetaText.status.copyWith(
+                          letterSpacing: 2,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded,
+                          color: BetaColors.textSecondary),
+                      tooltip: 'Copy',
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: code));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Code copied')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      );
+    } on FamilyTalkApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _inviting = false);
+      _showSnack(e.message);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _inviting = false);
+      _showSnack('Could not create invite: $e');
     }
   }
 
@@ -272,6 +361,18 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
         backgroundColor: BetaColors.background,
         title: Text('Family Talk', style: BetaText.greetingSub),
         actions: [
+          if (_isElderly)
+            IconButton(
+              icon: _inviting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.person_add_alt_rounded),
+              tooltip: 'Invite family',
+              onPressed: _inviting ? null : _inviteFamily,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Refresh',
@@ -343,10 +444,8 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         decoration: BoxDecoration(
-          color: mine ? BetaColors.purple : BetaColors.backgroundSecondary,
-          // BetaColors.accent does not exist in the palette; the accent
-          // is `purple`. My bubbles use the purple->pink pill gradient
-          // to match the mic button's visual language.
+          // My bubbles use the purple->pink pill gradient to match the
+          // mic button's visual language.
           gradient: mine ? BetaColors.pillGradient : null,
           color: mine ? null : BetaColors.backgroundSecondary,
           borderRadius: BorderRadius.only(
@@ -439,10 +538,8 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
             child: Container(
               width: 54,
               height: 54,
-              decoration: BoxDecoration(
-                color: recording ? Colors.red : BetaColors.purple,
-                // BetaColors.accent does not exist; use the signature
-                // mic gradient instead.
+              decoration: const BoxDecoration(
+                // Signature mic gradient for the walkie-talkie button.
                 gradient: BetaColors.micGradient,
                 shape: BoxShape.circle,
               ),
