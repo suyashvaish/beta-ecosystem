@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     @classmethod
     def split_phrases(cls, v):
         if isinstance(v, str):
-            return [p.strip() for p in v.split(",") if p.strip()]
+            return [p.strip() for origin in v.split(",") if p.strip()]
         return v
 
     @model_validator(mode="after")
@@ -75,8 +75,8 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT in ("staging", "production"):
             self.DEBUG = False
         # 3) AI provider consistency: the chosen provider must have its
-        #    credentials/endpoint configured, or the app fails fast with a
-        #    clear message instead of an obscure first-request error.
+        #    credentials/endpoint configured, or the app fails fast with
+        #    a clear message instead of an obscure first-request error.
         if self.AI_PROVIDER == "openai" and not self.OPENAI_API_KEY:
             raise ValueError(
                 "AI_PROVIDER=openai requires OPENAI_API_KEY. Alternatively "
@@ -86,7 +86,7 @@ class Settings(BaseSettings):
         if self.AI_PROVIDER == "local" and not self.LOCAL_AI_BASE_URL:
             raise ValueError(
                 "AI_PROVIDER=local requires LOCAL_AI_BASE_URL, e.g. "
-                "http://ollama:11434/v1 (Ollama) or your vLLM endpoint."
+                "http://ollama:11434/v1 (Ollama) or your vLLM endpoint (prod)."
             )
         # 4) Emergency phrases must never be empty (elder safety).
         if not self.EMERGENCY_PHRASES:
@@ -171,6 +171,15 @@ class Settings(BaseSettings):
     OPENAI_TTS_DEFAULT_VOICE: str = "alloy"
     MAX_AUDIO_UPLOAD_BYTES: int = 25 * 1024 * 1024  # 25 MB
     MAX_TTS_TEXT_LENGTH: int = 4000  # characters
+
+    # ---- Family Talk media ------------------------------------------------
+    # Where the backend stores Family Talk voice notes on disk. Local
+    # disk keeps the MVP migration-free; production swaps the media
+    # service for S3/GCS behind the same function signatures.
+    FAMILY_MEDIA_DIR: str = Field(
+        default="family_media",
+        description="Directory for Family Talk voice-note storage.",
+    )
 
     # ---- Memory / Vector store ------------------------------------------------
     VECTOR_DIMENSIONS: int = 1536
