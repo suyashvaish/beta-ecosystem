@@ -115,6 +115,29 @@ class FamilyTalkApiService {
     return (list.first as Map<String, dynamic>)['elder_user_id'] as String;
   }
 
+  /// Care-circle invitations (elder side): create a code to give a
+  /// family member so they can join from their Beta Care app.
+  Future<String> createInvitation() async {
+    final profile = await myProfile();
+    if (!profile.isElderly) {
+      throw FamilyTalkApiException(
+          'Only the elderly account can invite family members.');
+    }
+    final response = await _client
+        .post(
+          Uri.parse('$_apiV1/care-circles/invitations'),
+          headers: await _headers(jsonBody: true),
+          body: jsonEncode({
+            'elder_user_id': profile.userId,
+            'proposed_role': 'viewer',
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+    _throwOnHttpError(response, 'create invitation');
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return json['invite_code'] as String;
+  }
+
   // ------------------------------------------------------------------
   // Messages
   // ------------------------------------------------------------------
