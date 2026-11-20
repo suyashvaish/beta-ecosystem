@@ -343,7 +343,11 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         decoration: BoxDecoration(
-          color: mine ? BetaColors.accent : BetaColors.backgroundSecondary,
+          // BetaColors.accent does not exist in the palette; the accent
+          // is `purple`. My bubbles use the purple->pink pill gradient
+          // to match the mic button's visual language.
+          gradient: mine ? BetaColors.pillGradient : null,
+          color: mine ? null : BetaColors.backgroundSecondary,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -427,7 +431,9 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
               width: 54,
               height: 54,
               decoration: BoxDecoration(
-                color: recording ? Colors.red : BetaColors.accent,
+                // BetaColors.accent does not exist; use the signature
+                // mic gradient instead.
+                gradient: BetaColors.micGradient,
                 shape: BoxShape.circle,
               ),
               child: Icon(
