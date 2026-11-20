@@ -10,6 +10,7 @@ import '../theme/beta_theme.dart';
 import '../widgets/audio_waveform.dart';
 import '../widgets/beta_buttons.dart';
 import '../widgets/chat_message_bubble.dart';
+import 'family_talk_screen.dart';
 import 'settings_screen.dart';
 
 /// The redesigned Beta home experience.
@@ -523,6 +524,20 @@ class _VoiceHomePageState extends State<VoiceHomePage> {
                 ),
               ),
               const SizedBox(height: 18),
+              _menuAction(
+                icon: Icons.family_restroom_rounded,
+                label: 'Family Talk',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => FamilyTalkScreen(
+                        authService: widget.authService,
+                      ),
+                    ),
+                  );
+                },
+              ),
               _menuAction(
                 icon: Icons.chat_bubble_outline_rounded,
                 label: 'Clear conversation',

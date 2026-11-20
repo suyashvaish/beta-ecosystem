@@ -24,12 +24,12 @@ dependencies:
   # --- Settings persistence -------------------------------------------------
   shared_preferences: ^2.2.3
 
-  # Optional, for wiring up REAL microphone amplitude instead of the
-  # stream-driven pulse used for the assistant's replies. Uncomment
-  # whichever fits your case:
-  # record: ^5.0.4          # mic amplitude stream
-  # noise_meter: ^1.0.2     # mic decibel stream
-  # just_audio: ^0.9.36     # TTS/audio playback with position/processing streams
+  # --- Family Talk (walkie-talkie voice notes) -----------------------------
+  # record: microphone recording to a file (.m4a AAC)
+  record: ^5.1.2
+  # just_audio: playback of received voice notes through the
+  # backend's authorized playback endpoint (auth header attached).
+  just_audio: ^0.9.43
 
 dev_dependencies:
   flutter_test:
