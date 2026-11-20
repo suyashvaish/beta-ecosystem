@@ -108,7 +108,6 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
       if (!mounted) return;
       setState(() {
         _error = e.message;
-        _loading = <error-placeholder> ? null : null;
         _loading = false;
       });
     } catch (e) {
@@ -400,7 +399,7 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
           Expanded(
             child: TextField(
               controller: _inputController,
-              resolved-on: _sendText(),
+              onSubmitted: (_) => _sendText(),
               textInputAction: TextInputAction.send,
               enabled: !_sending,
               style: BetaText.body,
