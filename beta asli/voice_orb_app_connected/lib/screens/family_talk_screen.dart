@@ -130,7 +130,8 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
     _inputController.clear();
     setState(() => _sending = true);
     try {
-      final message = await _api.sendText(elderUserId: _elderUserId!, text: text);
+      final message =
+          await _api.sendText(elderUserId: _elderUserId!, text: text);
       if (!mounted) return;
       setState(() {
         _messages.add(message);
@@ -139,10 +140,7 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
       _scrollToBottom();
     } on FamilyTalkApiException catch (e) {
       if (!mounted) return;
-      setState(() {
-        _sending = false;
-        _error = e.message;
-      });
+      setState(() => _sending = false);
       _showSnack(e.message);
     }
   }
@@ -159,17 +157,20 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
     if (!status.isGranted) {
       setState(() => _recordingError =
           'Microphone access is blocked. Enable it for Beta in device settings.');
+      _showSnack(_recordingError!);
       return;
     }
 
     try {
       await _recorder.start(
         const RecordConfig(encoder: AudioEncoder.aacLc),
-        path: '${Directory.systemTemp.path}/family_note_${DateTime.now().millisecondsSinceEpoch}.m4a',
+        path:
+            '${Directory.systemTemp.path}/family_note_${DateTime.now().millisecondsSinceEpoch}.m4a',
       );
       setState(() => _recordStart = DateTime.now());
     } catch (e) {
       setState(() => _recordingError = 'Could not start recording: $e');
+      _showSnack(_recordingError!);
     }
   }
 
@@ -201,7 +202,7 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
         _sending = false;
       });
       _scrollToBottom();
-    } on FamilyException catch (e) {
+    } on FamilyTalkApiException catch (e) {
       if (!mounted) return;
       setState(() => _sending = false);
       _showSnack(e.message);
@@ -303,7 +304,8 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: BetaText.body.copyWith(color: BetaColors.textSecondary),
+                style:
+                    BetaText.body.copyWith(color: BetaColors.textSecondary),
               ),
               const SizedBox(height: 16),
               FilledButton(onPressed: _load, child: const Text('Retry')),
@@ -341,21 +343,18 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         decoration: BoxDecoration(
-          color: mine
-              ? BetaColors.accent
-              : BetaColors.backgroundSecondary,
+          color: mine ? BetaColors.accent : BetaColors.backgroundSecondary,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(Colors.white24.alpha),
+            topRight: const Radius.circular(16),
             bottomLeft: Radius.circular(mine ? 16 : 4),
             bottomRight: Radius.circular(mine ? 4 : 16),
           ),
         ),
         child: Column(
-          crossAxisAlignment: mine
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
-  children: [
+          crossAxisAlignment:
+              mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
             if (!mine)
               Text(
                 m.senderName,
@@ -365,14 +364,13 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    icon: Icon(
-                      _playingId == m.id
-                          ? Icons.stop_rounded
-                          : Icons.play_arrow_rounded,
-                    ),
-                    onPressed: () => _playMessage(m),
+                  Icon(
+                    _playingId == m.id
+                        ? Icons.stop_rounded
+                        : Icons.play_arrow_rounded,
+                    color: mine ? Colors.black : BetaColors.textPrimary,
                   ),
+                  const SizedBox(width: 4),
                   Text('${m.durationSeconds ?? 0}s'),
                 ],
               )
@@ -383,8 +381,8 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   m.transcript!,
-                  style: BetaText.status
-                      .copyWith(color: BetaColors.textSecondary),
+                  style:
+                      BetaText.status.copyWith(color: BetaColors.textSecondary),
                 ),
               ),
           ],
