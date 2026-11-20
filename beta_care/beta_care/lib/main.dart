@@ -1,9 +1,12 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/app_config.dart';
 import 'core/auth_gate.dart';
 import 'core/theme.dart';
+import 'firebase_options.dart';
 import 'providers/alerts_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/connectivity_provider.dart';
@@ -22,17 +25,12 @@ import 'services/firebase_notification_service.dart';
 import 'services/http_beta_api_client.dart';
 import 'services/notification_service.dart';
 
-// When wiring real Firebase Cloud Messaging, add:
-//   import 'package:firebase_messaging/firebase_messaging.dart';
-// and register this top-level function with
-// `FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler)`
-// BEFORE runApp(). It has to be top-level (not a method) because Dart may
-// invoke it while the app itself isn't running.
-//
-// @pragma('vm:entry-point')
-// Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
-//   await Firebase.initializeApp();
-// }
+/// FCM background handler. Top-level (not a method) because Dart may
+/// invoke it while the app itself isn't running.
+@pragma('vm:entry-point')
+Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,12 +44,11 @@ Future<void> main() async {
     apiClient = MockBetaApiClient();
     notificationService = MockNotificationService();
   } else {
-    // Real deployment: uncomment once a Firebase project is configured for
-    // this app (google-services.json / GoogleService-Info.plist added, and
-    // `flutter pub get` has resolved firebase_core).
-    //
-    // await Firebase.initializeApp();
-    // FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
+    // Real deployment: same Firebase project as Beta Asli
+    // (google-services.json / GoogleService-Info.plist are already in
+    // the platform folders).
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
     authService = FirebaseAuthService();
     apiClient = HttpBetaApiClient(authService: authService);
     notificationService = FirebaseNotificationService();
