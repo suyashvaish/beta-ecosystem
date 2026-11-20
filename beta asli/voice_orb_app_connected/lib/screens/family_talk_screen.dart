@@ -365,18 +365,26 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
                 style: BetaText.status.copyWith(fontSize: 11),
               ),
             if (isVoice)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _playingId == m.id
-                        ? Icons.stop_rounded
-                        : Icons.play_arrow_rounded,
-                    color: mine ? Colors.black : BetaColors.textPrimary,
+              // Tap the bubble to play / stop the voice note.
+              InkWell(
+                onTap: () => _playMessage(m),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _playingId == m.id
+                            ? Icons.stop_rounded
+                            : Icons.play_arrow_rounded,
+                        color: mine ? Colors.black : BetaColors.textPrimary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text('${m.durationSeconds ?? 0}s'),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  Text('${m.durationSeconds ?? 0}s'),
-                ],
+                ),
               )
             else
               Text(m.body ?? '', style: BetaText.body),
