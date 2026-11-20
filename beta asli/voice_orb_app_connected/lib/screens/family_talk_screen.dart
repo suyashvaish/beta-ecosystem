@@ -108,6 +108,7 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
       if (!mounted) return;
       setState(() {
         _error = e.message;
+        _loading = <error-placeholder> ? null : null;
         _loading = false;
       });
     } catch (e) {
@@ -343,7 +344,7 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         decoration: BoxDecoration(
-          color: mine ? BetaColors.accent : BetaColors.backgroundSecondary,
+          color: mine ? BetaColors.purple : BetaColors.backgroundSecondary,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -399,7 +400,7 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
           Expanded(
             child: TextField(
               controller: _inputController,
-              onSubmitted: (_) => _sendText(),
+              resolved-on: _sendText(),
               textInputAction: TextInputAction.send,
               enabled: !_sending,
               style: BetaText.body,
@@ -427,7 +428,7 @@ class _FamilyTalkScreenState extends State<FamilyTalkScreen> {
               width: 54,
               height: 54,
               decoration: BoxDecoration(
-                color: recording ? Colors.red : BetaColors.accent,
+                color: recording ? Colors.red : BetaColors.purple,
                 shape: BoxShape.circle,
               ),
               child: Icon(
