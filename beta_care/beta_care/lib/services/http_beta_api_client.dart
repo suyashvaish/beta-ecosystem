@@ -89,9 +89,6 @@ class HttpBetaApiClient implements BetaApiClient {
   Future<dynamic> _post(String path, {Object? body}) =>
       _send(() async => _client.post(_uri(path), headers: await _headers(), body: jsonEncode(body)));
 
-  Future<dynamic> _put(String path, {Object? body}) =>
-      _send(() async => _client.put(_uri(path), headers: await _headers(), body: jsonEncode(body)));
-
   Future<dynamic> _delete(String path) =>
       _send(() async => _client.delete(_uri(path), headers: await _headers()));
 
