@@ -25,8 +25,11 @@ dependencies:
   shared_preferences: ^2.2.3
 
   # --- Family Talk (walkie-talkie voice notes) -----------------------------
-  # record: microphone recording to a file (.m4a AAC)
-  record: ^5.1.2
+  # record: microphone recording to a file (.m4a AAC). Pinned to ^5.2.2:
+  # 5.2.1 pulls record_linux 0.7.2, which does not implement the
+  # current record_platform_interface (missing startStream / older
+  # hasPermission signature) and breaks compilation on some setups.
+  record: ^5.2.2
   # just_audio: playback of received voice notes through the
   # backend's authorized playback endpoint (auth header attached).
   just_audio: ^0.9.43
